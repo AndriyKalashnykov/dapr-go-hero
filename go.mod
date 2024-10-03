@@ -10,8 +10,7 @@ require (
 	github.com/go-logr/zapr v1.3.0
 	github.com/gofiber/fiber/v2 v2.52.5
 	github.com/golang/protobuf v1.5.4
-	github.com/jackc/pgx/v4 v4.18.2
-	github.com/jackc/pgx/v5 v5.7.1
+	github.com/jackc/pgx/v4 v4.18.3
 	github.com/oklog/run v1.1.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.0
@@ -32,6 +31,7 @@ require (
 	github.com/jackc/pgtype v1.14.3 // indirect
 	github.com/jackc/puddle v1.3.0 // indirect
 	github.com/klauspost/compress v1.17.10 // indirect
+	github.com/kr/pretty v0.3.0 // indirect
 	github.com/lib/pq v1.10.4 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
