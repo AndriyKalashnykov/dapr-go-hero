@@ -1,12 +1,18 @@
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
-  name: pubsubroutingconfig
+  name: dapr-go-hero
 spec:
+  metric:
+    enabled: true
   tracing:
     samplingRate: "1"
     zipkin:
       endpointAddress: http://localhost:9411/api/v2/spans
+  mtls:
+    allowedClockSkew: 15m
+    enabled: true
+    workloadCertTTL: 24h
   features:
     - name: PubSub.Routing
       enabled: true
