@@ -10,12 +10,11 @@ require (
 	github.com/go-logr/zapr v1.3.0
 	github.com/gofiber/fiber/v2 v2.52.5
 	github.com/golang/protobuf v1.5.4
-	github.com/jackc/pgx/v4 v4.18.2
-	github.com/jackc/pgx/v5 v5.7.1
+	github.com/jackc/pgx/v4 v4.18.3
 	github.com/oklog/run v1.1.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.0
-	google.golang.org/grpc v1.69.0
+	google.golang.org/grpc v1.69.2
 	google.golang.org/protobuf v1.36.0
 )
 
