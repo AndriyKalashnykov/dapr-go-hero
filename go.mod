@@ -4,15 +4,13 @@ go 1.23
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0
-	github.com/cenkalti/backoff/v5 v5.0.0
 	github.com/dapr/dapr v1.14.4
 	github.com/dapr/go-sdk v1.11.0
 	github.com/go-logr/logr v1.4.2
 	github.com/go-logr/zapr v1.3.0
 	github.com/gofiber/fiber/v2 v2.52.5
 	github.com/golang/protobuf v1.5.4
-	github.com/jackc/pgx/v4 v4.18.2
-	github.com/jackc/pgx/v5 v5.7.2
+	github.com/jackc/pgx/v4 v4.18.3
 	github.com/oklog/run v1.1.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.0
