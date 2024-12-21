@@ -4,7 +4,6 @@ go 1.23
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0
-	github.com/cenkalti/backoff/v5 v5.0.0
 	github.com/dapr/dapr v1.14.4
 	github.com/dapr/go-sdk v1.11.0
 	github.com/go-logr/logr v1.4.2
@@ -12,7 +11,7 @@ require (
 	github.com/gofiber/fiber/v2 v2.52.5
 	github.com/golang/protobuf v1.5.4
 	github.com/jackc/pgx/v4 v4.18.2
-	github.com/jackc/pgx/v5 v5.7.2
+	github.com/jackc/pgx/v5 v5.7.1
 	github.com/oklog/run v1.1.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.0
@@ -44,10 +43,10 @@ require (
 	github.com/valyala/fasthttp v1.56.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect
 	go.opentelemetry.io/otel v1.31.0 // indirect
-	golang.org/x/crypto v0.31.0 // indirect
+	golang.org/x/crypto v0.28.0 // indirect
 	golang.org/x/net v0.30.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
+	golang.org/x/sys v0.26.0 // indirect
+	golang.org/x/text v0.19.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241015192408-796eee8c2d53 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
