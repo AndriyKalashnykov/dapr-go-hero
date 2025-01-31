@@ -19,8 +19,8 @@ require (
 )
 
 require (
-	github.com/andybalholm/brotli v1.1.0 // indirect
-	github.com/go-chi/chi/v5 v5.1.0 // indirect
+	github.com/andybalholm/brotli v1.1.1 // indirect
+	github.com/go-chi/chi/v5 v5.2.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
 	github.com/jackc/pgconn v1.14.3 // indirect
@@ -28,24 +28,24 @@ require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgproto3/v2 v2.3.3 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgtype v1.14.3 // indirect
+	github.com/jackc/pgtype v1.14.4 // indirect
 	github.com/jackc/puddle v1.3.0 // indirect
-	github.com/klauspost/compress v1.17.10 // indirect
+	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
 	github.com/lib/pq v1.10.4 // indirect
-	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/shopspring/decimal v1.3.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	github.com/valyala/fasthttp v1.56.0 // indirect
+	github.com/valyala/fasthttp v1.58.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect
-	go.opentelemetry.io/otel v1.32.0 // indirect
-	golang.org/x/crypto v0.31.0 // indirect
-	golang.org/x/net v0.32.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
+	go.opentelemetry.io/otel v1.34.0 // indirect
+	golang.org/x/crypto v0.32.0 // indirect
+	golang.org/x/net v0.34.0 // indirect
+	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20241202173237-19429a94021a // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250127172529-29210b9bc287 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
