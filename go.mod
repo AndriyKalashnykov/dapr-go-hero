@@ -4,19 +4,17 @@ go 1.24.0
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0
-	github.com/cenkalti/backoff/v5 v5.0.2
 	github.com/dapr/dapr v1.15.3
 	github.com/dapr/go-sdk v1.12.0
 	github.com/go-logr/logr v1.4.2
 	github.com/go-logr/zapr v1.3.0
 	github.com/gofiber/fiber/v2 v2.52.6
 	github.com/golang/protobuf v1.5.4
-	github.com/jackc/pgx/v4 v4.18.2
-	github.com/jackc/pgx/v5 v5.7.4
+	github.com/jackc/pgx/v4 v4.18.3
 	github.com/oklog/run v1.1.0
 	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.0
-	google.golang.org/grpc v1.71.0
+	google.golang.org/grpc v1.71.1
 	google.golang.org/protobuf v1.36.6
 )
 
@@ -41,7 +39,7 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/shopspring/decimal v1.3.1 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
-	github.com/valyala/fasthttp v1.59.0 // indirect
+	github.com/valyala/fasthttp v1.60.0 // indirect
 	go.opentelemetry.io/otel v1.35.0 // indirect
 	golang.org/x/crypto v0.36.0 // indirect
 	golang.org/x/net v0.38.0 // indirect
