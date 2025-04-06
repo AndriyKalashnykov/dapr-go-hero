@@ -67,7 +67,7 @@ func (r *Repository) Load(ctx context.Context, id string) (*products.Product, er
 	if err != nil {
 		st, ok := status.FromError(err)
 		if ok && st.Code() == codes.NotFound {
-			return nil, errorz.NotFound(st.Message())
+			return nil, errorz.NotFound("%s", st.Message())
 		}
 		return nil, err
 	}

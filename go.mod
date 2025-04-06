@@ -4,7 +4,7 @@ go 1.24.0
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0
-	github.com/dapr/dapr v1.15.3
+	github.com/dapr/dapr v1.15.4
 	github.com/dapr/go-sdk v1.12.0
 	github.com/go-logr/logr v1.4.2
 	github.com/go-logr/zapr v1.3.0
@@ -41,11 +41,11 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.60.0 // indirect
 	go.opentelemetry.io/otel v1.35.0 // indirect
-	golang.org/x/crypto v0.36.0 // indirect
+	golang.org/x/crypto v0.37.0 // indirect
 	golang.org/x/net v0.38.0 // indirect
-	golang.org/x/sys v0.31.0 // indirect
-	golang.org/x/text v0.23.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250324211829-b45e905df463 // indirect
+	golang.org/x/sys v0.32.0 // indirect
+	golang.org/x/text v0.24.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250404141209-ee84b53bf3d0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

@@ -35,7 +35,7 @@ func From(err error) *Error {
 	if errz, ok := err.(*Error); ok {
 		return errz
 	}
-	return Internal(err, err.Error())
+	return Internal(err, "%s", err.Error())
 }
 
 func New(t string, code int, message string, details ...interface{}) *Error {
