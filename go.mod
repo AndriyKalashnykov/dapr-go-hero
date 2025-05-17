@@ -4,7 +4,7 @@ go 1.24.2
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0
-	github.com/dapr/dapr v1.15.4
+	github.com/dapr/dapr v1.15.5
 	github.com/dapr/go-sdk v1.12.0
 	github.com/go-logr/logr v1.4.2
 	github.com/go-logr/zapr v1.3.0
