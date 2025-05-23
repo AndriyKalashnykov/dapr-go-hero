@@ -8,7 +8,7 @@ require (
 	github.com/dapr/go-sdk v1.12.0
 	github.com/go-logr/logr v1.4.2
 	github.com/go-logr/zapr v1.3.0
-	github.com/gofiber/fiber/v2 v2.52.6
+	github.com/gofiber/fiber/v2 v2.52.8
 	github.com/golang/protobuf v1.5.4
 	github.com/jackc/pgx/v4 v4.18.3
 	github.com/oklog/run v1.1.0
