@@ -1,4 +1,5 @@
 [![ci](https://github.com/AndriyKalashnykov/dapr-go-hero/actions/workflows/ci.yml/badge.svg)](https://github.com/AndriyKalashnykov/dapr-go-hero/actions/workflows/ci.yml)
+[![Hits](https://hits.sh/github.com/AndriyKalashnykov/dapr-go-hero.svg?view=today-total&style=plastic)](https://hits.sh/github.com/AndriyKalashnykov/dapr-go-hero/)
 # From Zero to Hero with Go and Dapr
 
 [Slides](slides.pdf)
