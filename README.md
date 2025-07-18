@@ -101,3 +101,5 @@ I hope this was helpful! If you have better ways of handling anything in this sa
 ### Refernces
 
 [From Zero to Hero with Go and Dapr](https://github.com/pkedy/golang-dapr)
+[Code - Building Cloud-Native Services with Dapr, Go, and Kubernetes](https://github.com/vladimirvivien/dapr-examples)
+[Article - Building Cloud-Native Services with Dapr, Go, and Kubernetes](https://medium.com/@vladimirvivien/building-cloud-native-services-with-dapr-go-and-kubernetes-part-2-f773d484ecb0)
