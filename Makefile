@@ -3,22 +3,22 @@ PHONY: send-widget send-gadget send-thingamajig send-all
 PHONY: get-widget get-gadget get-thingamajig get-all
 
 run-test:
-	dapr run --app-id inventory --config ./config.yaml --components-path ./components --app-protocol http --app-port 3001 --dapr-http-port 3500 -- sleep 6000
+	dapr run --app-id inventory --config ./config.yaml --resources-path ./components --app-protocol http --app-port 3001 --dapr-http-port 3500 -- sleep 6000
 
 run-custom-http:
-	dapr run --app-id inventory --config ./config.yaml --components-path ./components --app-protocol http --app-port 3001 --dapr-http-port 3500 -- go run cmd/inventory/main.go http
+	dapr run --app-id inventory --config ./config.yaml --resources-path ./components --app-protocol http --app-port 3001 --dapr-http-port 3500 -- go run cmd/inventory/main.go http
 
 run-custom-grpc:
-	dapr run --app-id inventory --config ./config.yaml --components-path ./components --app-protocol grpc --app-port 4001 --dapr-http-port 3500 -- go run cmd/inventory/main.go grpc
+	dapr run --app-id inventory --config ./config.yaml --resources-path ./components --app-protocol grpc --app-port 4001 --dapr-http-port 3500 -- go run cmd/inventory/main.go grpc
 
 run-sdk-http:
-	dapr run --app-id inventory --config ./config.yaml --components-path ./components --app-protocol http --app-port 3002 --dapr-http-port 3500 -- go run cmd/inventory/main.go
+	dapr run --app-id inventory --config ./config.yaml --resources-path ./components --app-protocol http --app-port 3002 --dapr-http-port 3500 -- go run cmd/inventory/main.go
 
 run-sdk-grpc:
-	dapr run --app-id inventory --config ./config.yaml --components-path ./components --app-protocol grpc --app-port 4002 --dapr-http-port 3500 -- go run cmd/inventory/main.go
+	dapr run --app-id inventory --config ./config.yaml --resources-path ./components --app-protocol grpc --app-port 4002 --dapr-http-port 3500 -- go run cmd/inventory/main.go
 
 run-products:
-	dapr run --app-id products --config ./config.yaml --components-path ./components --app-protocol grpc --app-port 50151 -- go run cmd/products/main.go
+	dapr run --app-id products --config ./config.yaml --resources-path ./components --app-protocol grpc --app-port 50151 -- go run cmd/products/main.go
 
 send-widget:
 	cat messages/widget.json | jq

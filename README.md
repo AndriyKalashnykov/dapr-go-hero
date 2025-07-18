@@ -51,6 +51,7 @@ I launched Postgres in a container and used [pgAdmin](https://www.pgadmin.org) t
 
 ```shell
 docker run --name postgres -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres
+cat tables.sql | docker exec -i postgres psql -U postgres -d postgres
 ```
 
 **Start the Products service**
@@ -66,6 +67,7 @@ In a second terminal run: (_Pick the client mode_)
 ```shell
 make run-custom-http
 make run-custom-grpc
+or
 make run-sdk-http
 make run-sdk-grpc
 ```
@@ -98,4 +100,4 @@ I hope this was helpful! If you have better ways of handling anything in this sa
 
 ### Refernces
 
-[From Zero to Hero with Go and Dapr](https://github.com/AndriyKalashnykov/dapr-go-hero)
+[From Zero to Hero with Go and Dapr](https://github.com/pkedy/golang-dapr)
