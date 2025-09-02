@@ -7,7 +7,7 @@ import (
 	cpb "github.com/dapr/dapr/pkg/proto/common/v1"
 	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/go-logr/logr"
-	"github.com/golang/protobuf/ptypes/empty"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type (
@@ -37,7 +37,7 @@ func (s *Server) OnInvoke(ctx context.Context, in *cpb.InvokeRequest) (*cpb.Invo
 	return nil, nil
 }
 
-func (s *Server) ListInputBindings(ctx context.Context, in *empty.Empty) (*pb.ListInputBindingsResponse, error) {
+func (s *Server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*pb.ListInputBindingsResponse, error) {
 	return &pb.ListInputBindingsResponse{
 		Bindings: []string{},
 	}, nil
@@ -51,7 +51,7 @@ func (s *Server) Subscribe(subscriptions []*Subscription) {
 	s.subscriptions = append(s.subscriptions, subscriptions...)
 }
 
-func (s *Server) ListTopicSubscriptions(ctx context.Context, in *empty.Empty) (*pb.ListTopicSubscriptionsResponse, error) {
+func (s *Server) ListTopicSubscriptions(ctx context.Context, in *emptypb.Empty) (*pb.ListTopicSubscriptionsResponse, error) {
 	subs := make([]*pb.TopicSubscription, len(s.subscriptions))
 	for i, s := range s.subscriptions {
 		subs[i] = &pb.TopicSubscription{
