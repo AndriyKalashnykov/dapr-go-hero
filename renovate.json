@@ -38,6 +38,7 @@
       ],
       "matchDatasources": [
         "docker",
+        "go",
         "golang-version"
       ],
       "matchPackageNames": [
