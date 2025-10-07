@@ -44,7 +44,8 @@
       "matchPackageNames": [
         "go",
         "golang",
-        "github.com"
+        "github.com",
+        "google.golang.org"
       ],
       "automerge": true,
       "automergeType": "pr",
@@ -74,6 +75,7 @@
         "go",
         "golang",
         "github.com",
+        "google.golang.org",
         "ubuntu",
         "alpine",
         "gcr.io/distroless/static"
