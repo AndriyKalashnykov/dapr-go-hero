@@ -32,9 +32,19 @@
   ],
   "packageRules": [
     {
-      "description": "Automerge major updates",
-      "matchUpdateTypes": [
-        "major"
+      "description": "Automerge major updates for listed packages",
+      "matchUpdateTypes": ["major"],
+      "matchPackageNames": [
+        "go",
+        "golang",
+        "github.com",
+        "google.golang.org/grpc",
+        "actions/setup-go",
+        "github.com/cenkalti/backoff/v4",
+        "github.com/jackc/pgx/v4",
+        "ubuntu",
+        "alpine",
+        "gcr.io/distroless/static"
       ],
       "automerge": true,
       "automergeType": "pr",
@@ -55,16 +65,14 @@
         "grop",
         "unpin"
       ],
-      "matchDatasources": [
-        "docker",
-        "golang-version",
-        "go"
-      ],
       "matchPackageNames": [
         "go",
         "golang",
         "github.com",
         "google.golang.org/grpc",
+        "actions/setup-go",
+        "github.com/cenkalti/backoff/v4",
+        "github.com/jackc/pgx/v4",
         "ubuntu",
         "alpine",
         "gcr.io/distroless/static"
@@ -72,20 +80,6 @@
       "automerge": true,
       "automergeType": "pr",
       "platformAutomerge": true
-    },
-    {
-      "description": "Enforce bump range strategy",
-      "matchDatasources": [
-        "docker",
-        "golang-version"
-      ],
-      "matchPackageNames": [
-        "go",
-        "golang",
-        "google.golang.org/grpc",
-        "github.com"
-      ],
-      "rangeStrategy": "bump"
     },
     {
       "description": "Automerge github-actions updates",
