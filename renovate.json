@@ -36,17 +36,6 @@
       "matchUpdateTypes": [
         "major"
       ],
-      "matchDatasources": [
-        "docker",
-        "go",
-        "golang-version"
-      ],
-      "matchPackageNames": [
-        "go",
-        "golang",
-        "github.com",
-        "google.golang.org/grpc"
-      ],
       "automerge": true,
       "automergeType": "pr",
       "platformAutomerge": true
