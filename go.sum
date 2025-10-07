@@ -11,8 +11,8 @@ github.com/cockroachdb/apd v1.1.0/go.mod h1:8Sl8LxpKi29FqWXR16WEFZRNSz3SoPzUzeMe
 github.com/coreos/go-systemd v0.0.0-20190321100706-95778dfbb74e/go.mod h1:F5haX7vjVVG0kc13fIWeqUViNPyEJxv/OmvnBo0Yme4=
 github.com/coreos/go-systemd v0.0.0-20190719114852-fd7a80b32e1f/go.mod h1:F5haX7vjVVG0kc13fIWeqUViNPyEJxv/OmvnBo0Yme4=
 github.com/creack/pty v1.1.7/go.mod h1:lj5s0c3V2DBrqTV7llrYr5NG6My20zk30Fl46Y7DoTY=
-github.com/dapr/dapr v1.16.0 h1:la2WLZM8Myr2Pq3cyrFjHKWDSPYLzGZCs3p502TwBjI=
-github.com/dapr/dapr v1.16.0/go.mod h1:ln/mxvNOeqklaDmic4ppsxmnjl2D/oZGKaJy24IwaEY=
+github.com/dapr/dapr v1.16.1 h1:Qgw+uCbvo3vvr+xPcpgpMBtifvwTaN5JBXI0keqDK+Q=
+github.com/dapr/dapr v1.16.1/go.mod h1:dGrl+8KERGk0DmNtQ1zwpRd1V2FF5toVr9QvheY53Ik=
 github.com/dapr/durabletask-go v0.10.1 h1:gE88Qh4+/6zKdegHjOAOx+UQaPxmwWKWoIDivee23XY=
 github.com/dapr/durabletask-go v0.10.1/go.mod h1:0Ts4rXp74JyG19gDWPcwNo5V6NBZzhARzHF5XynmA7Q=
 github.com/dapr/go-sdk v1.13.0 h1:Qw2BmUonClQ9yK/rrEEaFL1PyDgq616RrvYj0CT67Lk=
