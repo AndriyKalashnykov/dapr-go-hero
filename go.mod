@@ -12,7 +12,7 @@ require (
 	github.com/jackc/pgx/v4 v4.18.3
 	github.com/oklog/run v1.2.0
 	go.uber.org/multierr v1.11.0
-	go.uber.org/zap v1.27.0
+	go.uber.org/zap v1.27.1
 	google.golang.org/grpc v1.77.0
 	google.golang.org/protobuf v1.36.10
 )
