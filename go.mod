@@ -4,7 +4,7 @@ go 1.25.1
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0
-	github.com/dapr/dapr v1.16.3
+	github.com/dapr/dapr v1.16.4
 	github.com/dapr/go-sdk v1.13.0
 	github.com/go-logr/logr v1.4.3
 	github.com/go-logr/zapr v1.3.0
@@ -20,7 +20,7 @@ require (
 require (
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.2.0 // indirect
-	github.com/dapr/durabletask-go v0.10.1 // indirect
+	github.com/dapr/durabletask-go v0.10.2 // indirect
 	github.com/dapr/kit v0.16.1 // indirect
 	github.com/go-chi/chi/v5 v5.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
