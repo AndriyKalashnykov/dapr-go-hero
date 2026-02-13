@@ -5,8 +5,8 @@ import (
 	"errors"
 
 	"github.com/go-logr/logr"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/errorz"
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/features/widgets"

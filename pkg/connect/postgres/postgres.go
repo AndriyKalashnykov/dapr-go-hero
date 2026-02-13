@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/components/secrets"
 )
@@ -36,7 +36,7 @@ func Connect(ctx context.Context, store secrets.Store,
 		config.AfterConnect = afterConnect[0]
 	}
 
-	pool, err := pgxpool.ConnectConfig(ctx, config)
+	pool, err := pgxpool.NewWithConfig(ctx, config)
 	if err != nil {
 		return nil, err
 	}
