@@ -9,6 +9,7 @@ require (
 	github.com/go-logr/logr v1.4.3
 	github.com/go-logr/zapr v1.3.0
 	github.com/gofiber/fiber/v2 v2.52.11
+	github.com/gofiber/fiber/v3 v3.0.0
 	github.com/jackc/pgx/v4 v4.18.3
 	github.com/oklog/run v1.2.0
 	go.uber.org/multierr v1.11.0
