@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	github.com/cenkalti/backoff/v4 v4.3.0
+	github.com/cenkalti/backoff/v5 v5.0.3
 	github.com/dapr/dapr v1.16.9
 	github.com/dapr/go-sdk v1.13.0
 	github.com/go-logr/logr v1.4.3
