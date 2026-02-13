@@ -7,7 +7,7 @@ import (
 	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/go-sdk/service/common"
 	"github.com/go-logr/logr"
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/dapr"
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/features/widgets"
@@ -30,13 +30,13 @@ func New(log logr.Logger, store widgets.Store) *Service {
 // SERVICE OPERATIONS
 
 func (s *Service) RegisterService(app *fiber.App) {
-	app.Get("/v1/widgets/:id", func(c *fiber.Ctx) error {
+	app.Get("/v1/widgets/:id", func(c fiber.Ctx) error {
 		widget, err := s.store.Load(c.Context(), c.Params("id"))
 		return response(c, widget, err)
 	})
 }
 
-func response(c *fiber.Ctx, val interface{}, err error) error {
+func response(c fiber.Ctx, val interface{}, err error) error {
 	if err != nil {
 		return err
 	}
@@ -69,7 +69,7 @@ func (s *Service) RegisterEventHandlers(app *fiber.App) {
 	app.Post("/widgets.v1", s.SaveHTTP)
 }
 
-func (s *Service) SaveHTTP(c *fiber.Ctx) error {
+func (s *Service) SaveHTTP(c fiber.Ctx) error {
 	var widget widgets.Widget
 	if err := dapr.DecodeCloudEvent(c, nil, &widget); err != nil {
 		return err

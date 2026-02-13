@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/go-logr/logr"
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 )
 
 type (
@@ -31,16 +31,16 @@ func RegisterEventHandlers(app *fiber.App, events ...Events) {
 
 func SubscribeHTTPHandler(log logr.Logger, app *fiber.App) func(subscriptions []*Subscription) {
 	return func(subscriptions []*Subscription) {
-		app.Get("/dapr/subscribe", func(c *fiber.Ctx) error {
+		app.Get("/dapr/subscribe", func(c fiber.Ctx) error {
 			log.Info("subscribe called", "subscriptions", subscriptions)
 			return c.JSON(subscriptions)
 		})
 	}
 }
 
-func DecodeCloudEvent(c *fiber.Ctx, ce *CloudEvent, target interface{}) error {
+func DecodeCloudEvent(c fiber.Ctx, ce *CloudEvent, target interface{}) error {
 	var event CloudEvent
-	if err := c.BodyParser(&event); err != nil {
+	if err := c.Bind().Body(&event); err != nil {
 		return err
 	}
 	if ce != nil {

@@ -14,7 +14,7 @@ import (
 	dapr_server_grpc "github.com/dapr/go-sdk/service/grpc"
 	dapr_server_http "github.com/dapr/go-sdk/service/http"
 	"github.com/go-logr/zapr"
-	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v3"
 	"github.com/oklog/run"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
@@ -120,8 +120,7 @@ func main() {
 
 	// Fiber app config with custom error handler
 	config := fiber.Config{
-		DisableStartupMessage: true,
-		ErrorHandler: func(c *fiber.Ctx, err error) error {
+		ErrorHandler: func(c fiber.Ctx, err error) error {
 			errz := errorz.From(err)
 			return c.Status(errz.Code).JSON(errz)
 		},

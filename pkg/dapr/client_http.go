@@ -6,15 +6,16 @@ import (
 	"os"
 	"path"
 
-	"github.com/gofiber/fiber/v2"
-	"go.uber.org/multierr"
+	"github.com/gofiber/fiber/v3/client"
 
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/components/secrets"
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/components/state"
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/errorz"
 )
 
-type HTTP struct{}
+type HTTP struct{
+	client *client.Client
+}
 
 var (
 	APIURL = fmt.Sprintf("http://127.0.0.1:%s/", os.Getenv("DAPR_HTTP_PORT"))
@@ -24,7 +25,8 @@ var (
 )
 
 func NewHTTP(ctx context.Context) (*HTTP, error) {
-	return &HTTP{}, nil
+	c := client.New()
+	return &HTTP{client: c}, nil
 }
 
 func (c *HTTP) Name() string {
@@ -33,43 +35,46 @@ func (c *HTTP) Name() string {
 
 func (c *HTTP) SetState(ctx context.Context, store string, items ...state.Item) error {
 	url := APIURL + path.Join("v1.0/state", store)
-	a := fiber.Post(url)
-	defer fiber.ReleaseAgent(a)
-	code, _, errs := a.JSON(items).Bytes()
-	if code/100 != 2 {
-		return errorz.Internal(fmt.Errorf("received %d status", code), "could not save state")
+	resp, err := c.client.Post(url, client.Config{
+		Body: items,
+	})
+	if err != nil {
+		return errorz.Internal(err, "could not save state")
 	}
-	if len(errs) > 0 {
-		return errorz.Internal(multierr.Combine(errs...), "could not save state")
+	if resp.StatusCode()/100 != 2 {
+		return errorz.Internal(fmt.Errorf("received %d status", resp.StatusCode()), "could not save state")
 	}
-
 	return nil
 }
 
 func (c *HTTP) GetState(ctx context.Context, store string, key string, target interface{}) error {
 	url := APIURL + path.Join("v1.0/state", store, key)
-	a := fiber.Get(url)
-	defer fiber.ReleaseAgent(a)
-	code, _, errs := a.Struct(target)
+	resp, err := c.client.Get(url)
+	if err != nil {
+		return errorz.Internal(err, "could not load key %q", key)
+	}
+	code := resp.StatusCode()
 	if code == 204 || code == 404 {
 		return errorz.NotFound("key %q not found", key)
 	}
-	if len(errs) > 0 {
-		return errorz.Internal(multierr.Combine(errs...), "could not load key %q", key)
+	if err := resp.JSON(target); err != nil {
+		return errorz.Internal(err, "could not parse response for key %q", key)
 	}
 	return nil
 }
 
 func (c *HTTP) GetSecret(ctx context.Context, store string, name string, target interface{}) error {
 	url := APIURL + path.Join("v1.0/secrets", store, name)
-	a := fiber.Get(url)
-	defer fiber.ReleaseAgent(a)
-	code, _, errs := a.Struct(target)
+	resp, err := c.client.Get(url)
+	if err != nil {
+		return errorz.Internal(err, "could not load secret %q", name)
+	}
+	code := resp.StatusCode()
 	if code == 204 || code == 404 {
 		return errorz.NotFound("secret %q not found", name)
 	}
-	if len(errs) > 0 {
-		return errorz.Internal(multierr.Combine(errs...), "could not load secret %q", name)
+	if err := resp.JSON(target); err != nil {
+		return errorz.Internal(err, "could not parse response for secret %q", name)
 	}
 	return nil
 }
