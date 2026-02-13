@@ -1,6 +1,15 @@
-PHONY: run-custom-http run-custom-grpc run-sdk-http run-sdk-grpc
-PHONY: send-widget send-gadget send-thingamajig send-all
-PHONY: get-widget get-gadget get-thingamajig get-all
+#PHONY: run-custom-http run-custom-grpc run-sdk-http run-sdk-grpc
+#PHONY: send-widget send-gadget send-thingamajig send-all
+#PHONY: get-widget get-gadget get-thingamajig get-all
+
+build:
+	@export CGO_ENABLED=0; GOOS=linux GOARCH=amd64 go build -o ./cmd/inventory/main ./cmd/inventory/main.go
+
+test:
+	@go test ./...
+
+update:
+	@go get -u ./...; go mod tidy
 
 run-test:
 	dapr run --app-id inventory --config ./config.yaml --resources-path ./components --app-protocol http --app-port 3001 --dapr-http-port 3500 -- sleep 6000
@@ -45,11 +54,3 @@ get-thingamajig:
 
 get-all: get-widget get-gadget get-thingamajig
 
-test:
-	@go test ./...
-
-build:
-	@export CGO_ENABLED=0; GOOS=linux GOARCH=amd64 go build -o ./cmd/inventory/main ./cmd/inventory/main.go
-
-update:
-	@go get -u ./...; go mod tidy
