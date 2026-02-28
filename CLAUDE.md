@@ -6,12 +6,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Educational Go application demonstrating Dapr building blocks (Pub/Sub with routing, Secret Store, State Store, Service Invocation) with four client approaches: custom HTTP, custom gRPC, Go SDK HTTP, and Go SDK gRPC.
 
-## Build & Test Commands
+## Build, Lint & Test Commands
 
 ```bash
-make build              # Build Linux amd64 binary (CGO_ENABLED=0)
-make test               # Run all tests (go test ./...)
-make update             # Update deps and tidy (go get -u ./... && go mod tidy)
+make help               # List all available Make targets
+make deps               # Install tool dependencies (gosec, golangci-lint, gocritic) if missing
+make lint               # Run golangci-lint
+make critic             # Run gocritic with all checks enabled
+make sec                # Run gosec security scanner (excludes generated proto/ dir)
+make test               # Run all tests (go test -v ./...)
+make build              # Full pipeline: deps → lint → critic → sec → compile both binaries
+make update             # Update all deps to latest (go get -u ./... && go mod tidy)
+make release            # Tag and push a release (runs full build first)
 ```
 
 Run a single test:
@@ -49,8 +55,8 @@ make get-thingamajig    # GET /v1/products/thingamajig
 
 ### Two Binaries
 
-- **`cmd/inventory/main.go`** — Main service: wires up all features, starts Fiber HTTP server (port 3000) for public API, plus Dapr callback servers on separate ports for event handling. Uses `oklog/run` for goroutine lifecycle management.
-- **`cmd/products/main.go`** — Standalone gRPC service for product storage (port 50151), invoked via Dapr service discovery.
+- **`cmd/inventory/main.go`** — Main service: wires up all features, starts Fiber HTTP server (port 3000) for public API, plus Dapr callback servers on separate ports for event handling. Uses `oklog/run` for goroutine lifecycle management. Explicit cleanup (no defers before `os.Exit` calls) to satisfy gocritic `exitAfterDefer`.
+- **`cmd/products/main.go`** — Standalone gRPC service for product storage (bound to `127.0.0.1:50151`), invoked via Dapr service discovery.
 
 ### Feature Packages (`pkg/features/`)
 
@@ -66,7 +72,7 @@ Each feature follows the repository pattern with `interface.go`, `repository/`, 
 
 Custom wrappers over Dapr's HTTP/gRPC protocols and the Go SDK:
 - `client_http.go` / `client_grpc.go` / `client_sdk.go` — Three client implementations for State and Secret stores
-- `server_http.go` / `server_grpc.go` — Event handler registration for callbacks
+- `server_http.go` / `server_grpc.go` — Event handler registration for callbacks (includes `OnBulkTopicEvent` for bulk pub/sub)
 - `subscription.go` — Merges subscriptions from all features into a single Dapr response
 - `cloudevent.go` — CloudEvent v1.0 envelope decoding
 
@@ -80,6 +86,7 @@ CloudEvents published to Dapr PubSub → Dapr routes by `event.type` → appropr
 - **pgx v5** — PostgreSQL driver with connection pooling (`pkg/connect/postgres/`)
 - **Secrets** — PostgreSQL credentials fetched from Dapr Secret Store (`secrets.json` for local dev)
 - **Protobuf** — Service definition in `proto/products/products.proto`, generated code committed
+- **gRPC** — Uses `grpc.NewClient` (not deprecated `Dial`/`DialContext`) with `insecure.NewCredentials()`
 
 ### Port Map
 
@@ -89,9 +96,9 @@ CloudEvents published to Dapr PubSub → Dapr routes by `event.type` → appropr
 | 3001 | Custom HTTP Dapr callbacks |
 | 3002 | SDK HTTP Dapr callbacks |
 | 3500 | Dapr sidecar HTTP |
-| 4001 | Custom gRPC Dapr callbacks |
+| 4001 | Custom gRPC Dapr callbacks (127.0.0.1 only) |
 | 4002 | SDK gRPC Dapr callbacks |
-| 50151 | Products gRPC service |
+| 50151 | Products gRPC service (127.0.0.1 only) |
 
 ## Dapr Configuration
 
@@ -106,6 +113,12 @@ Regenerate gRPC code after modifying `proto/products/products.proto`:
 protoc --go_out=. --go-grpc_out=. proto/products/products.proto
 ```
 
-## Known Issue
+## Code Quality Conventions
 
-The `dapr/dapr` v1.17.0 `AppCallbackServer` interface requires `OnBulkTopicEvent` which the custom gRPC server (`pkg/dapr/server_grpc.go`) does not implement. This causes a build error at `cmd/inventory/main.go:193`.
+- **Build gate**: `make build` runs lint → critic → sec → compile. All must pass with zero issues.
+- **gosec**: Generated protobuf files (`proto/`) are excluded. `#nosec` annotations used sparingly with justification.
+- **gocritic**: All checks enabled (`-enableAll`). No `defer` before `os.Exit` — use explicit cleanup instead.
+- **gRPC APIs**: Use `grpc.NewClient` (not `grpc.Dial`/`DialContext`). Use `insecure.NewCredentials()` (not `grpc.WithInsecure()`).
+- **Error returns**: All error returns must be checked (`errcheck`). Use `_ =` for intentionally ignored errors in cleanup paths.
+- **Parameter style**: Combine consecutive same-type params (`store, key string` not `store string, key string`).
+- **Network binding**: gRPC listeners bind to `127.0.0.1` to avoid gosec G102.

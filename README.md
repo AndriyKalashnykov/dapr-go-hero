@@ -13,9 +13,46 @@ Dapr, at its core, is a set of building block APIs that abstract away common tas
 * State store
 * Service Invocation (with discovery and tracing)
 
+## Prerequisites
+
+* [Go 1.26+](https://go.dev/dl/)
+* [Dapr CLI](https://docs.dapr.io/getting-started/install-dapr-cli/) (`dapr init` provides Redis)
+* [Docker](https://www.docker.com/) (for PostgreSQL and Redis)
+* [jq](https://jqlang.github.io/jq/) (for pretty-printing JSON responses)
+* [protoc](https://grpc.io/docs/protoc-installation/) with Go plugins (only if regenerating protobuf code)
+
+## Available Make targets
+
+Run `make help` to see all available commands:
+
+```
+make help               List available tasks
+make deps               Download and install dependencies (gosec, golangci-lint, gocritic)
+make lint               Run golangci-lint
+make critic             Run go-critic
+make sec                Run gosec security scanner
+make test               Run tests
+make build              Build inventory and products binaries (runs lint, critic, sec first)
+make update             Update dependencies to latest versions
+make release            Create and push a new tag
+make run-products       Run Products gRPC service
+make run-custom-http    Run inventory with custom HTTP client
+make run-custom-grpc    Run inventory with custom gRPC client
+make run-sdk-http       Run inventory with Go SDK HTTP client
+make run-sdk-grpc       Run inventory with Go SDK gRPC client
+make send-widget        Publish widget event to Dapr PubSub
+make send-gadget        Publish gadget event to Dapr PubSub
+make send-thingamajig   Publish thingamajig event to Dapr PubSub
+make send-all           Publish all three event types
+make get-widget         Fetch widget from REST API
+make get-gadget         Fetch gadget from REST API
+make get-thingamajig    Fetch product from REST API
+make get-all            Fetch all three items from REST API
+```
+
 ## Design choices
 
-When building Go microservices, we have many choices to make! gRPC, REST or both? Which HTTP router? How to organize packges?
+When building Go microservices, we have many choices to make! gRPC, REST or both? Which HTTP router? How to organize packages?
 
 In this application, packages are organized by purpose/feature. This creates a small hurdle for subscriptions because your application [responds with all of the topics in a single callback](https://docs.dapr.io/developing-applications/building-blocks/pubsub/howto-publish-subscribe/#step-2-subscribe-to-topics). To work around this, the subscriptions from each package are merged together into a single response.
 
@@ -23,7 +60,7 @@ You will find examples of "helper code" like this in `pkg/dapr`. However, be awa
 
 The Go SDK uses the [standard net/http package](https://pkg.go.dev/net/http). To be different, I choose [Fiber](https://gofiber.io/) as the HTTP router for public API traffic and found it to be straightforward to use.
 
-Event callbacks, such as PubSub events, should be considered private communication. Because of this, I highly recommend having Dapr callbacks listen on a separate port that is not publicly exposed. Even better, it should only listen on the loopback interface.
+Event callbacks, such as PubSub events, should be considered private communication. Because of this, I highly recommend having Dapr callbacks listen on a separate port that is not publicly exposed. The gRPC callback listener binds to the loopback interface (`127.0.0.1`) only for this reason.
 
 ## Application flow
 
@@ -49,8 +86,6 @@ All component configurations are located in the `components` directory. The main
 
 After running `dapr init`, you should have Redis running in a Docker container. You will need to create a PostgreSQL database and update `secrets.json` accordingly. Then create the `widgets` table from `tables.sql`.
 
-I launched Postgres in a container and used [pgAdmin](https://www.pgadmin.org) to user the `postgres` database and [`widgets`](./tables.sql) table.
-
 ```shell
 docker run --name postgres -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres
 cat tables.sql | docker exec -i postgres psql -U postgres -d postgres
@@ -69,7 +104,7 @@ In a second terminal run: (_Pick the client mode_)
 ```shell
 make run-custom-http
 make run-custom-grpc
-or
+# or
 make run-sdk-http
 make run-sdk-grpc
 ```
@@ -96,11 +131,21 @@ Send a Thingamajig: This will invoke the Products service using Dapr for service
 make send-thingamajig
 ```
 
+**Query the REST API**
+
+```shell
+make get-widget
+make get-gadget
+make get-thingamajig
+# or all at once
+make get-all
+```
+
 That's it!
 
 I hope this was helpful! If you have better ways of handling anything in this sample, please submit a PR! :)
 
-### Refernces
+### References
 
 * [From Zero to Hero with Go and Dapr](https://github.com/pkedy/golang-dapr)
 * [Code - Building Cloud-Native Services with Dapr, Go, and Kubernetes](https://github.com/vladimirvivien/dapr-examples)
