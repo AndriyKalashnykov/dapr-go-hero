@@ -13,7 +13,7 @@ import (
 type DBCreds struct {
 	Host     string `json:"host"`
 	Username string `json:"username"`
-	Password string `json:"password"`
+	Password string `json:"password"` // #nosec G117 -- struct field for deserialization, not a hardcoded secret
 	Database string `json:"database"`
 }
 
@@ -41,5 +41,9 @@ func Connect(ctx context.Context, store secrets.Store,
 		return nil, err
 	}
 
-	return pool, pool.Ping(ctx)
+	if err = pool.Ping(ctx); err != nil {
+		pool.Close()
+		return nil, err
+	}
+	return pool, nil
 }

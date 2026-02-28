@@ -47,7 +47,7 @@ func (c *HTTP) SetState(ctx context.Context, store string, items ...state.Item) 
 	return nil
 }
 
-func (c *HTTP) GetState(ctx context.Context, store string, key string, target interface{}) error {
+func (c *HTTP) GetState(ctx context.Context, store, key string, target interface{}) error {
 	url := APIURL + path.Join("v1.0/state", store, key)
 	resp, err := c.client.Get(url)
 	if err != nil {
@@ -63,7 +63,7 @@ func (c *HTTP) GetState(ctx context.Context, store string, key string, target in
 	return nil
 }
 
-func (c *HTTP) GetSecret(ctx context.Context, store string, name string, target interface{}) error {
+func (c *HTTP) GetSecret(ctx context.Context, store, name string, target interface{}) error {
 	url := APIURL + path.Join("v1.0/secrets", store, name)
 	resp, err := c.client.Get(url)
 	if err != nil {

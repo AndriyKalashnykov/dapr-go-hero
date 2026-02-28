@@ -26,3 +26,4 @@ vendor
 .idea
 dist/
 main
+cmd/products/products

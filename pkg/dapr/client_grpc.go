@@ -28,12 +28,10 @@ var (
 	_ = secrets.Store((*HTTP)(nil))
 )
 
-func NewGRPC(ctx context.Context) (*GRPC, error) {
-	conn, err := grpc.DialContext(
-		ctx,
+func NewGRPC(_ context.Context) (*GRPC, error) {
+	conn, err := grpc.NewClient(
 		GRPCADDRESS,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
 		grpc.WithUnaryInterceptor(UnaryClientInterceptor),
 	)
 	if err != nil {
@@ -63,15 +61,15 @@ func (c *GRPC) SetState(ctx context.Context, store string, items ...state.Item) 
 			Value: data,
 		}
 	}
-	c.client.SaveState(ctx, &pb.SaveStateRequest{
+	_, err := c.client.SaveState(ctx, &pb.SaveStateRequest{
 		StoreName: store,
 		States:    stateItems,
 	})
-	return nil
+	return err
 }
 
-func (c *GRPC) GetState(ctx context.Context, store string, key string, target interface{}) error {
-	state, err := c.client.GetState(ctx, &pb.GetStateRequest{
+func (c *GRPC) GetState(ctx context.Context, store, key string, target interface{}) error {
+	st, err := c.client.GetState(ctx, &pb.GetStateRequest{
 		StoreName:   store,
 		Key:         key,
 		Consistency: v1.StateOptions_CONSISTENCY_STRONG,
@@ -79,16 +77,16 @@ func (c *GRPC) GetState(ctx context.Context, store string, key string, target in
 	if err != nil {
 		return errorz.Internal(err, "could not load state %q", key)
 	}
-	if state.Data == nil {
+	if st.Data == nil {
 		return errorz.NotFound("key %q not found", key)
 	}
-	if err = json.Unmarshal(state.Data, target); err != nil {
+	if err = json.Unmarshal(st.Data, target); err != nil {
 		return errorz.Internal(err, "could decode state %q", key)
 	}
 	return nil
 }
 
-func (c *GRPC) GetSecret(ctx context.Context, store string, name string, target interface{}) error {
+func (c *GRPC) GetSecret(ctx context.Context, store, name string, target interface{}) error {
 	secret, err := c.client.GetSecret(ctx, &pb.GetSecretRequest{
 		StoreName: store,
 		Key:       name,

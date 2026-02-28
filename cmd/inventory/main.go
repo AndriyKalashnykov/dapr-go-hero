@@ -42,7 +42,6 @@ type api interface {
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	// Initialize logger
 	zapLog, err := zap.NewDevelopment()
@@ -85,6 +84,7 @@ func main() {
 	}))
 	if err != nil {
 		log.Error(err, "could not create connection to Dapr")
+		cancel()
 		os.Exit(1)
 	}
 	log.Info("Client initialized", "name", daprClient.Name())
@@ -95,9 +95,9 @@ func main() {
 		widgets_repo.AfterConnect)
 	if err != nil {
 		log.Error(err, "could not create connection to Postgres")
+		cancel()
 		os.Exit(1)
 	}
-	defer pool.Close()
 
 	// Wire up dependencies
 
@@ -113,9 +113,10 @@ func main() {
 	productRepo, err := products_repo.New(log)
 	if err != nil {
 		log.Error(err, "could not create connection to Products service")
+		pool.Close()
+		cancel()
 		os.Exit(1)
 	}
-	defer productRepo.Close()
 	productRest := products_service.New(log, productRepo)
 
 	// Fiber app config with custom error handler
@@ -135,7 +136,7 @@ func main() {
 		g.Add(func() error {
 			return app.Listen(":3000")
 		}, func(err error) {
-			app.Shutdown()
+			_ = app.Shutdown()
 		})
 	}
 
@@ -179,7 +180,7 @@ func main() {
 		g.Add(func() error {
 			return app.Listen(":3001")
 		}, func(err error) {
-			app.Shutdown()
+			_ = app.Shutdown()
 		})
 	}
 	// Custom - gRPC event handlers
@@ -192,7 +193,7 @@ func main() {
 			widgetRest, gadgetRest, productRest)
 		pb.RegisterAppCallbackServer(gs, server)
 		g.Add(func() error {
-			ln, err := net.Listen("tcp", ":4001")
+			ln, err := net.Listen("tcp", "127.0.0.1:4001")
 			if err != nil {
 				return err
 			}
@@ -216,7 +217,7 @@ func main() {
 			return s.Start()
 		}, func(err error) {
 			if s != nil {
-				s.Stop()
+				_ = s.Stop()
 			}
 		})
 	}
@@ -238,18 +239,22 @@ func main() {
 			return s.Start()
 		}, func(err error) {
 			if s != nil {
-				s.Stop()
+				_ = s.Stop()
 			}
 		})
 	}
 	// Termination signals
-	{
-		g.Add(run.SignalHandler(ctx, os.Interrupt, os.Kill))
-	}
+	g.Add(run.SignalHandler(ctx, os.Interrupt, os.Kill))
 
 	var se run.SignalError
 	if err := g.Run(); err != nil && !errors.As(err, &se) {
 		log.Error(err, "goroutine error")
+		_ = productRepo.Close()
+		pool.Close()
+		cancel()
 		os.Exit(1)
 	}
+	_ = productRepo.Close()
+	pool.Close()
+	cancel()
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/dapr"
@@ -29,9 +30,8 @@ type Repository struct {
 }
 
 func New(log logr.Logger) (*Repository, error) {
-	conn, err := grpc.Dial(GRPCADDRESS,
-		grpc.WithInsecure(),
-		grpc.WithBlock(),
+	conn, err := grpc.NewClient(GRPCADDRESS,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("could not connect: %v", err)

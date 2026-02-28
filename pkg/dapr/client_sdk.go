@@ -55,21 +55,21 @@ func (c *Client) SetState(ctx context.Context, store string, items ...state.Item
 	return nil
 }
 
-func (c *Client) GetState(ctx context.Context, store string, key string, target interface{}) error {
-	state, err := c.client.GetState(ctx, store, key, nil)
+func (c *Client) GetState(ctx context.Context, store, key string, target interface{}) error {
+	st, err := c.client.GetState(ctx, store, key, nil)
 	if err != nil {
 		return errorz.Internal(err, "could not load state %q", key)
 	}
-	if state.Value == nil {
+	if st.Value == nil {
 		return errorz.NotFound("key %q not found", key)
 	}
-	if err = json.Unmarshal(state.Value, target); err != nil {
+	if err = json.Unmarshal(st.Value, target); err != nil {
 		return errorz.Internal(err, "could decode state %q", key)
 	}
 	return nil
 }
 
-func (c *Client) GetSecret(ctx context.Context, store string, name string, target interface{}) error {
+func (c *Client) GetSecret(ctx context.Context, store, name string, target interface{}) error {
 	secret, err := c.client.GetSecret(ctx, store, name, nil)
 	if err != nil {
 		return errorz.Internal(err, "could not load secret %q", name)

@@ -40,7 +40,6 @@ func response(c fiber.Ctx, val interface{}, err error) error {
 	if err != nil {
 		return err
 	}
-	//return c.Format(val)
 	return c.JSON(val)
 }
 

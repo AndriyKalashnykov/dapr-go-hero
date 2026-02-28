@@ -101,3 +101,48 @@ func (s *Server) OnTopicEvent(ctx context.Context, in *pb.TopicEventRequest) (*p
 
 	return handler(ctx, in)
 }
+
+func (s *Server) OnBulkTopicEvent(ctx context.Context, in *pb.TopicEventBulkRequest) (*pb.TopicEventBulkResponse, error) {
+	entries := make([]*pb.TopicEventBulkResponseEntry, 0, len(in.Entries))
+	for _, entry := range in.Entries {
+		ce := entry.GetCloudEvent()
+		if ce == nil {
+			entries = append(entries, &pb.TopicEventBulkResponseEntry{
+				EntryId: entry.EntryId,
+				Status:  pb.TopicEventResponse_DROP,
+			})
+			continue
+		}
+
+		req := &pb.TopicEventRequest{
+			Id:              ce.Id,
+			Source:          ce.Source,
+			Type:            ce.Type,
+			SpecVersion:     ce.SpecVersion,
+			DataContentType: ce.DataContentType,
+			Data:            ce.Data,
+			Topic:           in.Topic,
+			PubsubName:      in.PubsubName,
+			Path:            in.Path,
+			Extensions:      ce.Extensions,
+		}
+
+		resp, err := s.OnTopicEvent(ctx, req)
+		if err != nil {
+			entries = append(entries, &pb.TopicEventBulkResponseEntry{
+				EntryId: entry.EntryId,
+				Status:  pb.TopicEventResponse_RETRY,
+			})
+			continue
+		}
+
+		entries = append(entries, &pb.TopicEventBulkResponseEntry{
+			EntryId: entry.EntryId,
+			Status:  resp.Status,
+		})
+	}
+
+	return &pb.TopicEventBulkResponse{
+		Statuses: entries,
+	}, nil
+}
