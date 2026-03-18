@@ -8,10 +8,10 @@ github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UF
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/dapr/dapr v1.17.1 h1:28QOecjW8lZIDGYVzVXSXYNE1c5aiKZKp9swBzI60yE=
 github.com/dapr/dapr v1.17.1/go.mod h1:G5q8noAOE7lAxluxWJxCI66Ms5xqNFT1VvDLwmKW420=
-github.com/dapr/durabletask-go v0.11.1 h1:URG8YjFqZ4dXj7gkLe3G9ZwKYuJhuF/jNyVx+jPMT8A=
-github.com/dapr/durabletask-go v0.11.1/go.mod h1:0Ts4rXp74JyG19gDWPcwNo5V6NBZzhARzHF5XynmA7Q=
-github.com/dapr/go-sdk v1.14.1 h1:fXc2Bk2RSRCs/x+qXt3ODBujaIbYuZbYHGqFWH7OqsA=
-github.com/dapr/go-sdk v1.14.1/go.mod h1:knMKBC95OCI3WdtitIsEXWy7eTpbZOMBh1NG/2QoV5Y=
+github.com/dapr/durabletask-go v0.11.3 h1:DVWfiPo9+Xg0Q3uJIFGvEh2707uNyFKwIoy/PXiTXGc=
+github.com/dapr/durabletask-go v0.11.3/go.mod h1:omLTzNvLQvpemgQYpKpfQGLMLVzDyUxBePRT/UlwqYI=
+github.com/dapr/go-sdk v1.14.2 h1:HV44TpxlpoX30LwddTMbiN8aZHwgFKRHI39wp/SzUdE=
+github.com/dapr/go-sdk v1.14.2/go.mod h1:k2A5GrEYXVTlZdTFMRGkzKaLRPP7Rdd6+KcqI674Ud8=
 github.com/dapr/kit v0.17.0 h1:WCltVyKRMwk+3pbBs/3Qe5on4BZUnhy6tKgLObB2nMs=
 github.com/dapr/kit v0.17.0/go.mod h1:40ZWs5P6xfYf7O59XgwqZkIyDldTIXlhTQhGop8QoSM=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
