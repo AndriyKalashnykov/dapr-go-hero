@@ -6,8 +6,8 @@ github.com/cenkalti/backoff/v5 v5.0.3 h1:ZN+IMa753KfX5hd8vVaMixjnqRZ3y8CuJKRKj1x
 github.com/cenkalti/backoff/v5 v5.0.3/go.mod h1:rkhZdG3JZukswDf7f0cwqPNk4K0sa+F97BxZthm/crw=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
-github.com/dapr/dapr v1.17.1 h1:28QOecjW8lZIDGYVzVXSXYNE1c5aiKZKp9swBzI60yE=
-github.com/dapr/dapr v1.17.1/go.mod h1:G5q8noAOE7lAxluxWJxCI66Ms5xqNFT1VvDLwmKW420=
+github.com/dapr/dapr v1.17.2 h1:aWtrlyWjq8H+sHV51c3LsFGkdIlQD3tU0fIJJPOgzmE=
+github.com/dapr/dapr v1.17.2/go.mod h1:pDb8lpBUonldt2rsYVrbJE/x6feHs6urtvHyzFkGc2g=
 github.com/dapr/durabletask-go v0.11.3 h1:DVWfiPo9+Xg0Q3uJIFGvEh2707uNyFKwIoy/PXiTXGc=
 github.com/dapr/durabletask-go v0.11.3/go.mod h1:omLTzNvLQvpemgQYpKpfQGLMLVzDyUxBePRT/UlwqYI=
 github.com/dapr/go-sdk v1.14.2 h1:HV44TpxlpoX30LwddTMbiN8aZHwgFKRHI39wp/SzUdE=
