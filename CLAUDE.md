@@ -122,3 +122,16 @@ protoc --go_out=. --go-grpc_out=. proto/products/products.proto
 - **Error returns**: All error returns must be checked (`errcheck`). Use `_ =` for intentionally ignored errors in cleanup paths.
 - **Parameter style**: Combine consecutive same-type params (`store, key string` not `store string, key string`).
 - **Network binding**: gRPC listeners bind to `127.0.0.1` to avoid gosec G102.
+
+## Skills
+
+Use the following skills when working on related files:
+
+| File(s) | Skill |
+|---------|-------|
+| `Makefile` | `/makefile` |
+| `renovate.json` | `/renovate` |
+| `README.md` | `/readme` |
+| `.github/workflows/*.yml` | `/ci-workflow` |
+
+When spawning subagents, always pass conventions from the respective skill into the agent's prompt.
