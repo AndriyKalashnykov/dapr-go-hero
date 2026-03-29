@@ -1,6 +1,4 @@
-name: ci
-
-run-name: ci
+name: CI
 
 on:
   push:
@@ -13,16 +11,12 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
-
-  builds:
-
-    timeout-minutes: 20
+  ci:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -35,25 +29,17 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Build
-        run: make build
+      - name: Lint
+        run: make lint
 
-  tests:
+      - name: Critic
+        run: make critic
 
-    runs-on: ubuntu-latest
-    name: test
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          fetch-depth: 0
+      - name: Security
+        run: make sec
 
-      - name: Install Go
-        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Run tests
+      - name: Test
         run: make test
 
+      - name: Build
+        run: make build

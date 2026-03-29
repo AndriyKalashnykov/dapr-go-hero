@@ -11,12 +11,15 @@ Educational Go application demonstrating Dapr building blocks (Pub/Sub with rout
 ```bash
 make help               # List all available Make targets
 make deps               # Install tool dependencies (gosec, golangci-lint, gocritic) if missing
+make clean              # Remove build artifacts
 make lint               # Run golangci-lint
 make critic             # Run gocritic with all checks enabled
 make sec                # Run gosec security scanner (excludes generated proto/ dir)
 make test               # Run all tests (go test -v ./...)
-make build              # Full pipeline: deps → lint → critic → sec → compile both binaries
+make build              # Compile both binaries (depends on deps only)
 make update             # Update all deps to latest (go get -u ./... && go mod tidy)
+make ci                 # Full CI pipeline: deps → lint → critic → sec → test → build
+make ci-run             # Run GitHub Actions workflow locally via act
 make release            # Tag and push a release (runs full build first)
 ```
 
@@ -100,6 +103,16 @@ CloudEvents published to Dapr PubSub → Dapr routes by `event.type` → appropr
 | 4002 | SDK gRPC Dapr callbacks |
 | 50151 | Products gRPC service (127.0.0.1 only) |
 
+## CI/CD
+
+GitHub Actions CI workflow (`.github/workflows/ci.yml`) runs on every push to `main`, tags `v*`, and pull requests:
+
+| Job | Steps |
+|-----|-------|
+| **ci** | Checkout, Setup Go, Lint, Critic, Security, Test, Build |
+
+A separate cleanup workflow (`.github/workflows/cleanup-runs.yml`) removes old workflow runs weekly.
+
 ## Dapr Configuration
 
 - `config.yaml` — Runtime config (tracing via Zipkin, PubSub.Routing feature enabled)
@@ -115,7 +128,7 @@ protoc --go_out=. --go-grpc_out=. proto/products/products.proto
 
 ## Code Quality Conventions
 
-- **Build gate**: `make build` runs lint → critic → sec → compile. All must pass with zero issues.
+- **Build gate**: `make ci` runs lint → critic → sec → test → build. All must pass with zero issues.
 - **gosec**: Generated protobuf files (`proto/`) are excluded. `#nosec` annotations used sparingly with justification.
 - **gocritic**: All checks enabled (`-enableAll`). No `defer` before `os.Exit` — use explicit cleanup instead.
 - **gRPC APIs**: Use `grpc.NewClient` (not `grpc.Dial`/`DialContext`). Use `insecure.NewCredentials()` (not `grpc.WithInsecure()`).

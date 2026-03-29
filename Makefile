@@ -9,6 +9,7 @@ GOFLAGS        := -mod=mod
 GOSEC_VERSION         := v2.25.0
 GOCRITIC_VERSION      := v0.14.3
 GOLANGCI_LINT_VERSION := v2.11.1
+ACT_VERSION           := 0.2.86
 
 #help: @ List available tasks
 help:
@@ -21,6 +22,12 @@ deps:
 	@command -v gosec >/dev/null 2>&1 || { echo "Installing gosec $(GOSEC_VERSION)..."; go install github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION); }
 	@command -v golangci-lint >/dev/null 2>&1 || { echo "Installing golangci-lint $(GOLANGCI_LINT_VERSION)..."; curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $$(go env GOPATH)/bin $(GOLANGCI_LINT_VERSION); }
 	@command -v gocritic >/dev/null 2>&1 || { echo "Installing gocritic $(GOCRITIC_VERSION)..."; go install -v github.com/go-critic/go-critic/cmd/gocritic@$(GOCRITIC_VERSION); }
+
+#deps-act: @ Install act for running GitHub Actions locally
+deps-act: deps
+	@command -v act >/dev/null 2>&1 || { echo "Installing act $(ACT_VERSION)..."; \
+		curl -sSfL https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash -s -- -b /usr/local/bin v$(ACT_VERSION); \
+	}
 
 #clean: @ Remove build artifacts
 clean:
@@ -40,11 +47,11 @@ sec: deps
 	@gosec -exclude-dir=proto ./...
 
 #test: @ Run tests
-test:
+test: deps
 	@export GOFLAGS=$(GOFLAGS); go test -v ./...
 
 #build: @ Build inventory and products binaries
-build: deps lint critic sec
+build: deps
 	@export GOFLAGS=$(GOFLAGS); export CGO_ENABLED=0; export GOOS=linux; export GOARCH=amd64; go build -a -o ./cmd/inventory/main ./cmd/inventory/main.go
 	@export GOFLAGS=$(GOFLAGS); export CGO_ENABLED=0; export GOOS=linux; export GOARCH=amd64; go build -a -o ./cmd/products/products ./cmd/products/main.go
 
@@ -60,6 +67,11 @@ update:
 ci: deps lint critic sec test build
 	@echo "Local CI pipeline passed."
 
+#ci-run: @ Run GitHub Actions workflow locally using act
+ci-run: deps-act
+	@act push --container-architecture linux/amd64 \
+		--artifact-server-path /tmp/act-artifacts
+
 #release: @ Create and push a new tag
 release: build
 	@bash -c 'newtag="$(NEWTAG)" && \
@@ -72,8 +84,8 @@ release: build
 		git push && \
 		echo "Done."'
 
-#run-test: @ Run inventory with Dapr sidecar only (no app)
-run-test:
+#dapr-test: @ Run inventory with Dapr sidecar only (no app)
+dapr-test:
 	@dapr run --app-id inventory --config ./config.yaml --resources-path ./components --app-protocol http --app-port 3001 --dapr-http-port 3500 -- sleep 6000
 
 #run-custom-http: @ Run inventory with custom HTTP client
@@ -129,12 +141,6 @@ get-thingamajig:
 #get-all: @ Fetch all three items from REST API
 get-all: get-widget get-gadget get-thingamajig
 
-.PHONY: help deps clean lint critic sec test build run update ci release \
-	run-test run-custom-http run-custom-grpc run-sdk-http run-sdk-grpc run-products \
-	send-widget send-gadget send-thingamajig send-all \
-	get-widget get-gadget get-thingamajig get-all \
-	renovate-bootstrap renovate-validate
-
 # === Renovate ===
 NVM_VERSION := 0.40.4
 
@@ -151,3 +157,9 @@ renovate-bootstrap:
 #renovate-validate: @ Validate Renovate configuration
 renovate-validate: renovate-bootstrap
 	@npx --yes renovate --platform=local
+
+.PHONY: help deps deps-act clean lint critic sec test build run update ci ci-run release \
+	dapr-test run-custom-http run-custom-grpc run-sdk-http run-sdk-grpc run-products \
+	send-widget send-gadget send-thingamajig send-all \
+	get-widget get-gadget get-thingamajig get-all \
+	renovate-bootstrap renovate-validate

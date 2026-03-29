@@ -1,5 +1,7 @@
-[![ci](https://github.com/AndriyKalashnykov/dapr-go-hero/actions/workflows/ci.yml/badge.svg)](https://github.com/AndriyKalashnykov/dapr-go-hero/actions/workflows/ci.yml)
+[![CI](https://github.com/AndriyKalashnykov/dapr-go-hero/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/AndriyKalashnykov/dapr-go-hero/actions/workflows/ci.yml)
 [![Hits](https://hits.sh/github.com/AndriyKalashnykov/dapr-go-hero.svg?view=today-total&style=plastic)](https://hits.sh/github.com/AndriyKalashnykov/dapr-go-hero/)
+[![Renovate enabled](https://img.shields.io/badge/renovate-enabled-brightgreen.svg)](https://app.renovatebot.com/dashboard#github/AndriyKalashnykov/dapr-go-hero)
+
 # From Zero to Hero with Go and Dapr
 
 [Slides](slides.pdf)
@@ -13,42 +15,99 @@ Dapr, at its core, is a set of building block APIs that abstract away common tas
 * State store
 * Service Invocation (with discovery and tracing)
 
+## Quick Start
+
+```bash
+make deps               # install tool dependencies (gosec, golangci-lint, gocritic)
+make build              # compile inventory and products binaries
+make test               # run tests
+make run-products       # start Products gRPC service (terminal 1)
+make run                # start Inventory service with Dapr (terminal 2)
+```
+
 ## Prerequisites
 
-* [Go 1.26+](https://go.dev/dl/)
-* [Dapr CLI](https://docs.dapr.io/getting-started/install-dapr-cli/) (`dapr init` provides Redis)
-* [Docker](https://www.docker.com/) (for PostgreSQL and Redis)
-* [jq](https://jqlang.github.io/jq/) (for pretty-printing JSON responses)
-* [protoc](https://grpc.io/docs/protoc-installation/) with Go plugins (only if regenerating protobuf code)
+| Tool | Version | Purpose |
+|------|---------|---------|
+| [Go](https://go.dev/dl/) | 1.26+ | Language runtime and compiler |
+| [GNU Make](https://www.gnu.org/software/make/) | 3.81+ | Build orchestration |
+| [Dapr CLI](https://docs.dapr.io/getting-started/install-dapr-cli/) | latest | Microservices runtime (`dapr init` provides Redis) |
+| [Docker](https://www.docker.com/) | latest | PostgreSQL and Redis containers |
+| [jq](https://jqlang.github.io/jq/) | latest | Pretty-printing JSON responses |
+| [protoc](https://grpc.io/docs/protoc-installation/) | latest | Regenerating protobuf code (optional) |
+| [act](https://github.com/nektos/act) | latest | Running GitHub Actions locally (optional) |
 
-## Available Make targets
+Install all required tool dependencies:
 
-Run `make help` to see all available commands:
-
+```bash
+make deps
 ```
-make help               List available tasks
-make deps               Download and install dependencies (gosec, golangci-lint, gocritic)
-make lint               Run golangci-lint
-make critic             Run go-critic
-make sec                Run gosec security scanner
-make test               Run tests
-make build              Build inventory and products binaries (runs lint, critic, sec first)
-make update             Update dependencies to latest versions
-make release            Create and push a new tag
-make run-products       Run Products gRPC service
-make run-custom-http    Run inventory with custom HTTP client
-make run-custom-grpc    Run inventory with custom gRPC client
-make run-sdk-http       Run inventory with Go SDK HTTP client
-make run-sdk-grpc       Run inventory with Go SDK gRPC client
-make send-widget        Publish widget event to Dapr PubSub
-make send-gadget        Publish gadget event to Dapr PubSub
-make send-thingamajig   Publish thingamajig event to Dapr PubSub
-make send-all           Publish all three event types
-make get-widget         Fetch widget from REST API
-make get-gadget         Fetch gadget from REST API
-make get-thingamajig    Fetch product from REST API
-make get-all            Fetch all three items from REST API
-```
+
+## Available Make Targets
+
+Run `make help` to see all available targets.
+
+### Build & Test
+
+| Target | Description |
+|--------|-------------|
+| `make build` | Build inventory and products binaries |
+| `make test` | Run tests |
+| `make clean` | Remove build artifacts |
+| `make update` | Update dependencies to latest versions |
+
+### Code Quality
+
+| Target | Description |
+|--------|-------------|
+| `make lint` | Run golangci-lint |
+| `make critic` | Run gocritic with all checks enabled |
+| `make sec` | Run gosec security scanner |
+
+### CI
+
+| Target | Description |
+|--------|-------------|
+| `make ci` | Full CI pipeline: lint, critic, sec, test, build |
+| `make ci-run` | Run GitHub Actions workflow locally via [act](https://github.com/nektos/act) |
+
+### Dapr Services
+
+| Target | Description |
+|--------|-------------|
+| `make run` | Run inventory service with Dapr (SDK HTTP mode) |
+| `make run-products` | Run Products gRPC service |
+| `make run-custom-http` | Run inventory with custom HTTP client |
+| `make run-custom-grpc` | Run inventory with custom gRPC client |
+| `make run-sdk-http` | Run inventory with Go SDK HTTP client |
+| `make run-sdk-grpc` | Run inventory with Go SDK gRPC client |
+| `make dapr-test` | Run inventory with Dapr sidecar only (no app) |
+
+### Publish Events
+
+| Target | Description |
+|--------|-------------|
+| `make send-widget` | Publish widget event to Dapr PubSub |
+| `make send-gadget` | Publish gadget event to Dapr PubSub |
+| `make send-thingamajig` | Publish thingamajig event to Dapr PubSub |
+| `make send-all` | Publish all three event types |
+
+### Query REST API
+
+| Target | Description |
+|--------|-------------|
+| `make get-widget` | Fetch widget from REST API |
+| `make get-gadget` | Fetch gadget from REST API |
+| `make get-thingamajig` | Fetch product from REST API |
+| `make get-all` | Fetch all three items from REST API |
+
+### Utilities
+
+| Target | Description |
+|--------|-------------|
+| `make deps` | Install required tool dependencies (idempotent) |
+| `make release` | Create and push a new tag |
+| `make renovate-validate` | Validate Renovate configuration |
 
 ## Design choices
 
@@ -144,6 +203,16 @@ make get-all
 That's it!
 
 I hope this was helpful! If you have better ways of handling anything in this sample, please submit a PR! :)
+
+## CI/CD
+
+GitHub Actions runs on every push to `main`, tags `v*`, and pull requests.
+
+| Job | Triggers | Steps |
+|-----|----------|-------|
+| **ci** | push, PR, tags | Lint, Critic, Security, Test, Build |
+
+[Renovate](https://docs.renovatebot.com/) keeps dependencies up to date with platform automerge enabled.
 
 ### References
 
