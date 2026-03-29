@@ -132,4 +132,22 @@ get-all: get-widget get-gadget get-thingamajig
 .PHONY: help deps clean lint critic sec test build run update ci release \
 	run-test run-custom-http run-custom-grpc run-sdk-http run-sdk-grpc run-products \
 	send-widget send-gadget send-thingamajig send-all \
-	get-widget get-gadget get-thingamajig get-all
+	get-widget get-gadget get-thingamajig get-all \
+	renovate-bootstrap renovate-validate
+
+# === Renovate ===
+NVM_VERSION := 0.40.4
+
+#renovate-bootstrap: @ Install nvm and npm for Renovate
+renovate-bootstrap:
+	@command -v node >/dev/null 2>&1 || { \
+		echo "Installing nvm $(NVM_VERSION)..."; \
+		curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v$(NVM_VERSION)/install.sh | bash; \
+		export NVM_DIR="$$HOME/.nvm"; \
+		[ -s "$$NVM_DIR/nvm.sh" ] && . "$$NVM_DIR/nvm.sh"; \
+		nvm install --lts; \
+	}
+
+#renovate-validate: @ Validate Renovate configuration
+renovate-validate: renovate-bootstrap
+	@npx --yes renovate --platform=local
