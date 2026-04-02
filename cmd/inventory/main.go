@@ -16,7 +16,6 @@ import (
 	"github.com/go-logr/zapr"
 	"github.com/gofiber/fiber/v3"
 	"github.com/oklog/run"
-	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 
@@ -207,7 +206,7 @@ func main() {
 		var s common.Service
 		g.Add(func() error {
 			s = dapr_server_http.NewService(":3002")
-			err = multierr.Combine(
+			err = errors.Join(
 				widgetRest.RegisterTopicEventHandlersSDK(s),
 				gadgetRest.RegisterTopicEventHandlersSDK(s),
 				productRest.RegisterTopicEventHandlersSDK(s))
@@ -229,7 +228,7 @@ func main() {
 			if err != nil {
 				return err
 			}
-			err = multierr.Combine(
+			err = errors.Join(
 				widgetRest.RegisterTopicEventHandlersSDK(s),
 				gadgetRest.RegisterTopicEventHandlersSDK(s),
 				productRest.RegisterTopicEventHandlersSDK(s))

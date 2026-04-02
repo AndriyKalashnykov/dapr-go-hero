@@ -11,9 +11,8 @@ require (
 	github.com/gofiber/fiber/v3 v3.1.0
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/oklog/run v1.2.0
-	go.uber.org/multierr v1.11.0
 	go.uber.org/zap v1.27.1
-	google.golang.org/grpc v1.79.3
+	google.golang.org/grpc v1.80.0
 	google.golang.org/protobuf v1.36.11
 )
 
@@ -44,6 +43,7 @@ require (
 	go.opentelemetry.io/otel v1.40.0 // indirect
 	go.opentelemetry.io/otel/metric v1.40.0 // indirect
 	go.opentelemetry.io/otel/trace v1.40.0 // indirect
+	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.49.0 // indirect
 	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect

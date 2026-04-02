@@ -8,8 +8,8 @@ GOFLAGS        := -mod=mod
 # === Tool Versions (pinned) ===
 GOSEC_VERSION         := v2.25.0
 GOCRITIC_VERSION      := v0.14.3
-GOLANGCI_LINT_VERSION := v2.11.1
-ACT_VERSION           := 0.2.86
+GOLANGCI_LINT_VERSION := v2.11.4
+ACT_VERSION           := 0.2.87
 NVM_VERSION           := 0.40.4
 GVM_SHA               := dd652539fa4b771840846f8319fad303c7d0a8d2 # v1.0.22
 
