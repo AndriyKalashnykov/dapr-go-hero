@@ -1,12 +1,13 @@
 [![CI](https://github.com/AndriyKalashnykov/dapr-go-hero/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/AndriyKalashnykov/dapr-go-hero/actions/workflows/ci.yml)
 [![Hits](https://hits.sh/github.com/AndriyKalashnykov/dapr-go-hero.svg?view=today-total&style=plastic)](https://hits.sh/github.com/AndriyKalashnykov/dapr-go-hero/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg)](https://opensource.org/licenses/MIT)
 [![Renovate enabled](https://img.shields.io/badge/renovate-enabled-brightgreen.svg)](https://app.renovatebot.com/dashboard#github/AndriyKalashnykov/dapr-go-hero)
 
 # From Zero to Hero with Go and Dapr
 
 [Slides](slides.pdf)
 
-This is a Go application demonstrating the key features of [Dapr](https://dapr.io) with a few different approaches. My goal is to help you pick the best fit for your needs and level up as a microservices developer.
+This is a Go application demonstrating the key features of [Dapr](https://dapr.io) with a few different approaches. Built with Fiber v3, pgx v5, gRPC/protobuf, Redis, and PostgreSQL. My goal is to help you pick the best fit for your needs and level up as a microservices developer.
 
 Dapr, at its core, is a set of building block APIs that abstract away common tasks so you can focus on what matters most-- business value/features. We will focus on the building blocks that I consider as the most useful for Go developers.
 
@@ -24,6 +25,8 @@ make test               # run tests
 make run-products       # start Products gRPC service (terminal 1)
 make run                # start Inventory service with Dapr (terminal 2)
 ```
+
+> **Note:** Running the services requires `dapr init`, a PostgreSQL container, and the `widgets` table from `tables.sql`. See [Running the demo](#running-the-demo) for full setup instructions.
 
 ## Prerequisites
 
@@ -68,7 +71,7 @@ Run `make help` to see all available targets.
 
 | Target | Description |
 |--------|-------------|
-| `make ci` | Full CI pipeline: lint, critic, sec, test, build |
+| `make ci` | Run full local CI pipeline |
 | `make ci-run` | Run GitHub Actions workflow locally via [act](https://github.com/nektos/act) |
 
 ### Dapr Services
@@ -105,7 +108,13 @@ Run `make help` to see all available targets.
 
 | Target | Description |
 |--------|-------------|
+| `make help` | List available tasks |
 | `make deps` | Install required tool dependencies (idempotent) |
+| `make deps-act` | Install act for running GitHub Actions locally |
+| `make deps-check` | Show required Go versions and gvm status |
+| `make deps-prune` | Remove unused and redundant dependencies |
+| `make deps-prune-check` | Verify no prunable dependencies (CI gate) |
+| `make deps-renovate` | Install nvm and npm for Renovate |
 | `make release` | Create and push a new tag |
 | `make renovate-validate` | Validate Renovate configuration |
 
@@ -208,9 +217,11 @@ I hope this was helpful! If you have better ways of handling anything in this sa
 
 GitHub Actions runs on every push to `main`, tags `v*`, and pull requests.
 
-| Job | Triggers | Steps |
-|-----|----------|-------|
-| **ci** | push, PR, tags | Lint, Critic, Security, Test, Build |
+| Job | Depends on | Steps |
+|-----|-----------|-------|
+| **static-check** | — | Lint, Critic, Security |
+| **build** | static-check | Build |
+| **test** | static-check | Test |
 
 [Renovate](https://docs.renovatebot.com/) keeps dependencies up to date with platform automerge enabled.
 

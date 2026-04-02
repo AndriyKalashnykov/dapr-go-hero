@@ -20,6 +20,9 @@ make build              # Compile both binaries (depends on deps only)
 make update             # Update all deps to latest (go get -u ./... && go mod tidy)
 make ci                 # Full CI pipeline: deps → lint → critic → sec → test → build
 make ci-run             # Run GitHub Actions workflow locally via act
+make deps-check         # Show required Go versions and gvm status
+make deps-prune         # Remove unused and redundant dependencies
+make deps-prune-check   # Verify no prunable dependencies (CI gate)
 make release            # Tag and push a release (runs full build first)
 ```
 
@@ -105,11 +108,13 @@ CloudEvents published to Dapr PubSub → Dapr routes by `event.type` → appropr
 
 ## CI/CD
 
-GitHub Actions CI workflow (`.github/workflows/ci.yml`) runs on every push to `main`, tags `v*`, and pull requests:
+GitHub Actions CI workflow (`.github/workflows/ci.yml`) runs on every push to `main`, tags `v*`, pull requests, and `workflow_call`:
 
-| Job | Steps |
-|-----|-------|
-| **ci** | Checkout, Setup Go, Lint, Critic, Security, Test, Build |
+| Job | Depends on | Steps |
+|-----|-----------|-------|
+| **static-check** | — | Checkout, Setup Go, Lint, Critic, Security |
+| **build** | static-check | Checkout, Setup Go, Build |
+| **test** | static-check | Checkout, Setup Go, Test |
 
 A separate cleanup workflow (`.github/workflows/cleanup-runs.yml`) removes old workflow runs weekly.
 
