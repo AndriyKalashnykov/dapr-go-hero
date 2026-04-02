@@ -19,7 +19,7 @@ Dapr, at its core, is a set of building block APIs that abstract away common tas
 ## Quick Start
 
 ```bash
-make deps               # install tool dependencies (gosec, golangci-lint, gocritic)
+make deps               # install tool dependencies (gosec, golangci-lint)
 make build              # compile inventory and products binaries
 make test               # run tests
 make run-products       # start Products gRPC service (terminal 1)
@@ -63,8 +63,7 @@ Run `make help` to see all available targets.
 
 | Target | Description |
 |--------|-------------|
-| `make lint` | Run golangci-lint |
-| `make critic` | Run gocritic with all checks enabled |
+| `make lint` | Run golangci-lint (includes gocritic via .golangci.yml) |
 | `make sec` | Run gosec security scanner |
 
 ### CI
@@ -219,7 +218,7 @@ GitHub Actions runs on every push to `main`, tags `v*`, and pull requests.
 
 | Job | Depends on | Steps |
 |-----|-----------|-------|
-| **static-check** | — | Lint, Critic, Security |
+| **static-check** | — | Lint, Security |
 | **build** | static-check | Build |
 | **test** | static-check | Test |
 

@@ -10,15 +10,14 @@ Educational Go application demonstrating Dapr building blocks (Pub/Sub with rout
 
 ```bash
 make help               # List all available Make targets
-make deps               # Install tool dependencies (gosec, golangci-lint, gocritic) if missing
+make deps               # Install tool dependencies (gosec, golangci-lint) if missing
 make clean              # Remove build artifacts
-make lint               # Run golangci-lint
-make critic             # Run gocritic with all checks enabled
+make lint               # Run golangci-lint (includes gocritic via .golangci.yml)
 make sec                # Run gosec security scanner (excludes generated proto/ dir)
 make test               # Run all tests (go test -v ./...)
 make build              # Compile both binaries (depends on deps only)
 make update             # Update all deps to latest (go get -u ./... && go mod tidy)
-make ci                 # Full CI pipeline: deps → lint → critic → sec → test → build
+make ci                 # Full CI pipeline: deps → lint → sec → test → build
 make ci-run             # Run GitHub Actions workflow locally via act
 make deps-check         # Show required Go versions and gvm status
 make deps-prune         # Remove unused and redundant dependencies
@@ -112,7 +111,7 @@ GitHub Actions CI workflow (`.github/workflows/ci.yml`) runs on every push to `m
 
 | Job | Depends on | Steps |
 |-----|-----------|-------|
-| **static-check** | — | Checkout, Setup Go, Lint, Critic, Security |
+| **static-check** | — | Checkout, Setup Go, Lint, Security |
 | **build** | static-check | Checkout, Setup Go, Build |
 | **test** | static-check | Checkout, Setup Go, Test |
 
@@ -128,14 +127,14 @@ A separate cleanup workflow (`.github/workflows/cleanup-runs.yml`) removes old w
 
 Regenerate gRPC code after modifying `proto/products/products.proto`:
 ```bash
-protoc --go_out=. --go-grpc_out=. proto/products/products.proto
+protoc --go_out=. --go-grpc_out=. --go_opt=paths=source_relative --go-grpc_opt=paths=source_relative proto/products/products.proto
 ```
 
 ## Code Quality Conventions
 
-- **Build gate**: `make ci` runs lint → critic → sec → test → build. All must pass with zero issues.
+- **Build gate**: `make ci` runs lint → sec → test → build. All must pass with zero issues.
 - **gosec**: Generated protobuf files (`proto/`) are excluded. `#nosec` annotations used sparingly with justification.
-- **gocritic**: All checks enabled (`-enableAll`). No `defer` before `os.Exit` — use explicit cleanup instead.
+- **gocritic**: Integrated into golangci-lint via `.golangci.yml` with all tags enabled. No `defer` before `os.Exit` — use explicit cleanup instead.
 - **gRPC APIs**: Use `grpc.NewClient` (not `grpc.Dial`/`DialContext`). Use `insecure.NewCredentials()` (not `grpc.WithInsecure()`).
 - **Error returns**: All error returns must be checked (`errcheck`). Use `_ =` for intentionally ignored errors in cleanup paths.
 - **Parameter style**: Combine consecutive same-type params (`store, key string` not `store string, key string`).

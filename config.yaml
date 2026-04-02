@@ -13,8 +13,3 @@ spec:
     allowedClockSkew: 15m
     enabled: false
     workloadCertTTL: 24h
-  features:
-    - name: PubSub.Routing
-      enabled: true
-    - name: proxy.grpc
-      enabled: true

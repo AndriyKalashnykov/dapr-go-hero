@@ -7,7 +7,6 @@ GOFLAGS        := -mod=mod
 
 # === Tool Versions (pinned) ===
 GOSEC_VERSION         := v2.25.0
-GOCRITIC_VERSION      := v0.14.3
 GOLANGCI_LINT_VERSION := v2.11.4
 ACT_VERSION           := 0.2.87
 NVM_VERSION           := 0.40.4
@@ -55,8 +54,7 @@ deps:
 		$(call go-exec,go install github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION)); }
 	@$(call go-exec,command -v golangci-lint) >/dev/null 2>&1 || { echo "Installing golangci-lint $(GOLANGCI_LINT_VERSION)..."; \
 		$(call go-exec,go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)); }
-	@$(call go-exec,command -v gocritic) >/dev/null 2>&1 || { echo "Installing gocritic $(GOCRITIC_VERSION)..."; \
-		$(call go-exec,go install -v github.com/go-critic/go-critic/cmd/gocritic@$(GOCRITIC_VERSION)); }
+
 
 #deps-act: @ Install act for running GitHub Actions locally
 deps-act: deps
@@ -98,13 +96,9 @@ clean:
 	@rm -f ./cmd/inventory/main ./cmd/products/products
 	@echo "Build artifacts removed."
 
-#lint: @ Run golangci-lint
+#lint: @ Run golangci-lint (includes gocritic via .golangci.yml)
 lint: deps
 	@$(call go-exec,golangci-lint run ./...)
-
-#critic: @ Run gocritic with all checks enabled
-critic: deps
-	@$(call go-exec,gocritic check -enableAll ./...)
 
 #sec: @ Run gosec security scanner
 sec: deps
@@ -128,7 +122,7 @@ update: deps
 	@$(call go-exec,export GOFLAGS=$(GOFLAGS) && go get -u ./... && go mod tidy)
 
 #ci: @ Run full local CI pipeline
-ci: deps lint critic sec test build
+ci: deps lint sec test build
 	@echo "Local CI pipeline passed."
 
 #ci-run: @ Run GitHub Actions workflow locally using act
@@ -222,7 +216,7 @@ renovate-validate: deps-renovate
 	@npx --yes renovate --platform=local
 
 .PHONY: help deps deps-act deps-check deps-prune deps-prune-check deps-renovate \
-	clean lint critic sec test build run update ci ci-run release \
+	clean lint sec test build run update ci ci-run release \
 	dapr-test run-custom-http run-custom-grpc run-sdk-http run-sdk-grpc run-products \
 	send-widget send-gadget send-thingamajig send-all \
 	get-widget get-gadget get-thingamajig get-all \

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package dapr.examples.golang.products.v1;
 
-option go_package = "github.org/AndriyKalashnykov/dapr-go-hero/pkg/products";
+option go_package = "github.com/AndriyKalashnykov/dapr-go-hero/proto/products";
 
 import "google/protobuf/empty.proto";
 

@@ -34,9 +34,6 @@ jobs:
       - name: Lint
         run: make lint
 
-      - name: Critic
-        run: make critic
-
       - name: Security
         run: make sec
 
