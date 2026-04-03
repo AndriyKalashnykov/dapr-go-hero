@@ -7,7 +7,7 @@
   "postUpdateOptions": [
     "gomodTidy"
   ],
-  "commitMessagePrefix": "chore(all): ",
+  "semanticCommitScope": "deps",
   "commitMessageAction": "update",
   "commitBody": "Signed-off-by: Renovate Bot <bot@renovateapp.com>",
   "labels": [
@@ -21,12 +21,59 @@
   "automergeStrategy": "squash",
   "ignoreTests": false,
   "vulnerabilityAlerts": {
+    "description": "Auto-merge security vulnerability alerts immediately",
     "labels": [
       "security"
     ],
     "automerge": true,
     "minimumReleaseAge": "0 days"
   },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Track gosec version in Makefile",
+      "managerFilePatterns": ["/^Makefile$/"],
+      "matchStrings": [
+        "GOSEC_VERSION\\s*:=\\s*(?<currentValue>\\S+)\\n"
+      ],
+      "depNameTemplate": "securego/gosec",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Track golangci-lint version in Makefile",
+      "managerFilePatterns": ["/^Makefile$/"],
+      "matchStrings": [
+        "GOLANGCI_LINT_VERSION\\s*:=\\s*(?<currentValue>\\S+)\\n"
+      ],
+      "depNameTemplate": "golangci/golangci-lint",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Track act version in Makefile",
+      "managerFilePatterns": ["/^Makefile$/"],
+      "matchStrings": [
+        "ACT_VERSION\\s*:=\\s*(?<currentValue>\\S+)\\n"
+      ],
+      "depNameTemplate": "nektos/act",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Track nvm version in Makefile",
+      "managerFilePatterns": ["/^Makefile$/"],
+      "matchStrings": [
+        "NVM_VERSION\\s*:=\\s*(?<currentValue>\\S+)\\n"
+      ],
+      "depNameTemplate": "nvm-sh/nvm",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    }
+  ],
   "packageRules": [
     {
       "description": "Wait 3 days before automerging major updates",
@@ -58,6 +105,13 @@
       "matchPackageNames": [
         "/^github.com\\/dapr/"
       ]
+    },
+    {
+      "description": "Group Makefile tool version updates",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "groupName": "Makefile tools"
     }
   ]
 }

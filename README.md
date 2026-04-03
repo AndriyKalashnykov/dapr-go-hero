@@ -32,7 +32,7 @@ make run                # start Inventory service with Dapr (terminal 2)
 
 | Tool | Version | Purpose |
 |------|---------|---------|
-| [Go](https://go.dev/dl/) | 1.26+ | Language runtime and compiler |
+| [Go](https://go.dev/dl/) | 1.26.1+ | Language runtime and compiler |
 | [GNU Make](https://www.gnu.org/software/make/) | 3.81+ | Build orchestration |
 | [Dapr CLI](https://docs.dapr.io/getting-started/install-dapr-cli/) | latest | Microservices runtime (`dapr init` provides Redis) |
 | [Docker](https://www.docker.com/) | latest | PostgreSQL and Redis containers |
@@ -77,7 +77,7 @@ Run `make help` to see all available targets.
 
 | Target | Description |
 |--------|-------------|
-| `make run` | Run inventory service with Dapr (SDK HTTP mode) |
+| `make run` | Run inventory service with Dapr (default: SDK HTTP mode) |
 | `make run-products` | Run Products gRPC service |
 | `make run-custom-http` | Run inventory with custom HTTP client |
 | `make run-custom-grpc` | Run inventory with custom gRPC client |
@@ -113,7 +113,7 @@ Run `make help` to see all available targets.
 | `make deps-check` | Show required Go versions and gvm status |
 | `make deps-prune` | Remove unused and redundant dependencies |
 | `make deps-prune-check` | Verify no prunable dependencies (CI gate) |
-| `make deps-renovate` | Install nvm and npm for Renovate |
+| `make renovate-bootstrap` | Install nvm and npm for Renovate |
 | `make release` | Create and push a new tag |
 | `make renovate-validate` | Validate Renovate configuration |
 
@@ -214,17 +214,19 @@ I hope this was helpful! If you have better ways of handling anything in this sa
 
 ## CI/CD
 
-GitHub Actions runs on every push to `main`, tags `v*`, and pull requests.
+GitHub Actions runs on every push to `main`, tags `v*`, pull requests, and `workflow_call`.
 
 | Job | Depends on | Steps |
 |-----|-----------|-------|
-| **static-check** | — | Lint, Security |
+| **static-check** | — | Lint, Security, Tidy check |
 | **build** | static-check | Build |
 | **test** | static-check | Test |
 
 [Renovate](https://docs.renovatebot.com/) keeps dependencies up to date with platform automerge enabled.
 
-### References
+A separate cleanup workflow (`.github/workflows/cleanup-runs.yml`) removes old workflow runs weekly.
+
+## References
 
 * [From Zero to Hero with Go and Dapr](https://github.com/pkedy/golang-dapr)
 * [Code - Building Cloud-Native Services with Dapr, Go, and Kubernetes](https://github.com/vladimirvivien/dapr-examples)

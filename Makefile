@@ -2,14 +2,14 @@
 
 APP_NAME       := dapr-go-hero
 CURRENTTAG     := $(shell git describe --tags --abbrev=0 2>/dev/null || echo "dev")
-NEWTAG         ?= $(shell bash -c 'read -p "Please provide a new tag (current tag - $(CURRENTTAG)): " newtag; echo $$newtag')
 GOFLAGS        := -mod=mod
 
 # === Tool Versions (pinned) ===
-GOSEC_VERSION         := v2.25.0
-GOLANGCI_LINT_VERSION := v2.11.4
+GOSEC_VERSION         := 2.25.0
+GOLANGCI_LINT_VERSION := 2.11.4
 ACT_VERSION           := 0.2.87
 NVM_VERSION           := 0.40.4
+NODE_VERSION          := 24
 GVM_SHA               := dd652539fa4b771840846f8319fad303c7d0a8d2 # v1.0.22
 
 # === Go Version Management ===
@@ -50,10 +50,10 @@ deps:
 	else \
 		command -v go >/dev/null 2>&1 || { echo "Error: Go required. Install gvm from https://github.com/moovweb/gvm or Go from https://go.dev/dl/"; exit 1; }; \
 	fi
-	@$(call go-exec,command -v gosec) >/dev/null 2>&1 || { echo "Installing gosec $(GOSEC_VERSION)..."; \
-		$(call go-exec,go install github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION)); }
-	@$(call go-exec,command -v golangci-lint) >/dev/null 2>&1 || { echo "Installing golangci-lint $(GOLANGCI_LINT_VERSION)..."; \
-		$(call go-exec,go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)); }
+	@$(call go-exec,command -v gosec) >/dev/null 2>&1 || { echo "Installing gosec v$(GOSEC_VERSION)..."; \
+		$(call go-exec,go install github.com/securego/gosec/v2/cmd/gosec@v$(GOSEC_VERSION)); }
+	@$(call go-exec,command -v golangci-lint) >/dev/null 2>&1 || { echo "Installing golangci-lint v$(GOLANGCI_LINT_VERSION)..."; \
+		$(call go-exec,go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v$(GOLANGCI_LINT_VERSION)); }
 
 
 #deps-act: @ Install act for running GitHub Actions locally
@@ -66,7 +66,7 @@ deps-act: deps
 deps-check:
 	@echo "Go versions required: $(GO_VERSIONS)"
 	@echo "Primary Go version:   $(GO_VERSION)"
-	@command -v gvm >/dev/null 2>&1 && { \
+	@[ -s "$$HOME/.gvm/scripts/gvm" ] && { \
 		bash -c '. $$GVM_ROOT/scripts/gvm && gvm list'; \
 	} || echo "gvm not installed — install from https://github.com/moovweb/gvm"
 
@@ -114,7 +114,7 @@ build: deps
 	@$(call go-exec,export GOFLAGS=$(GOFLAGS) CGO_ENABLED=0 GOOS=linux GOARCH=amd64 && go build -a -o ./cmd/products/products ./cmd/products/main.go)
 
 #run: @ Run inventory service with Dapr (default: SDK HTTP mode)
-run:
+run: deps
 	@dapr run --app-id inventory --config ./config.yaml --resources-path ./components --app-protocol http --app-port 3002 --dapr-http-port 3500 -- go run cmd/inventory/main.go
 
 #update: @ Update dependencies to latest versions
@@ -122,7 +122,7 @@ update: deps
 	@$(call go-exec,export GOFLAGS=$(GOFLAGS) && go get -u ./... && go mod tidy)
 
 #ci: @ Run full local CI pipeline
-ci: deps lint sec test build
+ci: deps lint sec test build deps-prune-check
 	@echo "Local CI pipeline passed."
 
 #ci-run: @ Run GitHub Actions workflow locally using act
@@ -132,9 +132,9 @@ ci-run: deps-act
 
 #release: @ Create and push a new tag
 release: build
-	@bash -c 'newtag="$(NEWTAG)" && \
+	@bash -c 'read -p "New tag (current: $(CURRENTTAG)): " newtag && \
 		echo "$$newtag" | grep -qE "^v[0-9]+\.[0-9]+\.[0-9]+$$" || { echo "Error: Tag must match vN.N.N (got: $$newtag)"; exit 1; } && \
-		echo -n "Are you sure to create and push $$newtag tag? [y/N] " && read ans && [ "$${ans:-N}" = y ] && \
+		echo -n "Create and push $$newtag? [y/N] " && read ans && [ "$${ans:-N}" = y ] && \
 		git add -A && \
 		git commit -a -s -m "Cut $$newtag release" && \
 		git tag $$newtag && \
@@ -147,23 +147,23 @@ dapr-test:
 	@dapr run --app-id inventory --config ./config.yaml --resources-path ./components --app-protocol http --app-port 3001 --dapr-http-port 3500 -- sleep 6000
 
 #run-custom-http: @ Run inventory with custom HTTP client
-run-custom-http:
+run-custom-http: deps
 	@dapr run --app-id inventory --config ./config.yaml --resources-path ./components --app-protocol http --app-port 3001 --dapr-http-port 3500 -- go run cmd/inventory/main.go http
 
 #run-custom-grpc: @ Run inventory with custom gRPC client
-run-custom-grpc:
+run-custom-grpc: deps
 	@dapr run --app-id inventory --config ./config.yaml --resources-path ./components --app-protocol grpc --app-port 4001 --dapr-http-port 3500 -- go run cmd/inventory/main.go grpc
 
 #run-sdk-http: @ Run inventory with Go SDK HTTP client
-run-sdk-http:
+run-sdk-http: deps
 	@dapr run --app-id inventory --config ./config.yaml --resources-path ./components --app-protocol http --app-port 3002 --dapr-http-port 3500 -- go run cmd/inventory/main.go
 
 #run-sdk-grpc: @ Run inventory with Go SDK gRPC client
-run-sdk-grpc:
+run-sdk-grpc: deps
 	@dapr run --app-id inventory --config ./config.yaml --resources-path ./components --app-protocol grpc --app-port 4002 --dapr-http-port 3500 -- go run cmd/inventory/main.go
 
 #run-products: @ Run Products gRPC service
-run-products:
+run-products: deps
 	@dapr run --app-id products --config ./config.yaml --resources-path ./components --app-protocol grpc --app-port 50151 -- go run cmd/products/main.go
 
 #send-widget: @ Publish widget event to Dapr PubSub
@@ -201,23 +201,23 @@ get-all: get-widget get-gadget get-thingamajig
 
 # === Renovate ===
 
-#deps-renovate: @ Install nvm and npm for Renovate
-deps-renovate:
+#renovate-bootstrap: @ Install nvm and npm for Renovate
+renovate-bootstrap:
 	@command -v node >/dev/null 2>&1 || { \
-		echo "Installing nvm $(NVM_VERSION)..."; \
+		echo "Installing nvm $(NVM_VERSION) + Node $(NODE_VERSION)..."; \
 		curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v$(NVM_VERSION)/install.sh | bash; \
 		export NVM_DIR="$$HOME/.nvm"; \
 		[ -s "$$NVM_DIR/nvm.sh" ] && . "$$NVM_DIR/nvm.sh"; \
-		nvm install --lts; \
+		nvm install $(NODE_VERSION); \
 	}
 
 #renovate-validate: @ Validate Renovate configuration
-renovate-validate: deps-renovate
+renovate-validate: renovate-bootstrap
 	@npx --yes renovate --platform=local
 
-.PHONY: help deps deps-act deps-check deps-prune deps-prune-check deps-renovate \
+.PHONY: help deps deps-act deps-check deps-prune deps-prune-check \
 	clean lint sec test build run update ci ci-run release \
 	dapr-test run-custom-http run-custom-grpc run-sdk-http run-sdk-grpc run-products \
 	send-widget send-gadget send-thingamajig send-all \
 	get-widget get-gadget get-thingamajig get-all \
-	renovate-validate
+	renovate-bootstrap renovate-validate

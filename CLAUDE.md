@@ -14,10 +14,10 @@ make deps               # Install tool dependencies (gosec, golangci-lint) if mi
 make clean              # Remove build artifacts
 make lint               # Run golangci-lint (includes gocritic via .golangci.yml)
 make sec                # Run gosec security scanner (excludes generated proto/ dir)
-make test               # Run all tests (go test -v ./...)
+make test               # Run all tests (go test -race -v ./...)
 make build              # Compile both binaries (depends on deps only)
 make update             # Update all deps to latest (go get -u ./... && go mod tidy)
-make ci                 # Full CI pipeline: deps → lint → sec → test → build
+make ci                 # Full CI pipeline: deps → lint → sec → test → build → deps-prune-check
 make ci-run             # Run GitHub Actions workflow locally via act
 make deps-check         # Show required Go versions and gvm status
 make deps-prune         # Remove unused and redundant dependencies
@@ -111,7 +111,7 @@ GitHub Actions CI workflow (`.github/workflows/ci.yml`) runs on every push to `m
 
 | Job | Depends on | Steps |
 |-----|-----------|-------|
-| **static-check** | — | Checkout, Setup Go, Lint, Security |
+| **static-check** | — | Checkout, Setup Go, Lint, Security, Tidy check |
 | **build** | static-check | Checkout, Setup Go, Build |
 | **test** | static-check | Checkout, Setup Go, Test |
 
@@ -119,8 +119,8 @@ A separate cleanup workflow (`.github/workflows/cleanup-runs.yml`) removes old w
 
 ## Dapr Configuration
 
-- `config.yaml` — Runtime config (tracing via Zipkin, PubSub.Routing feature enabled)
-- `components/` — Component definitions: `pubsub.yaml` (Redis), `statestore.yaml` (Redis, scoped to "inventory"), `secrets.yaml` (local file store)
+- `config.yaml` — Runtime config (tracing via Zipkin, mTLS, metrics)
+- `components/` — Component definitions: `pubsub.yaml` (Redis), `statestore.yaml` (Redis, scoped to "inventory"), `secrets.yaml` (local file store), `subscription.yaml` (programmatic subscriptions)
 - `secrets.json` — Local dev secrets for PostgreSQL connection
 
 ## Protobuf
@@ -139,6 +139,15 @@ protoc --go_out=. --go-grpc_out=. --go_opt=paths=source_relative --go-grpc_opt=p
 - **Error returns**: All error returns must be checked (`errcheck`). Use `_ =` for intentionally ignored errors in cleanup paths.
 - **Parameter style**: Combine consecutive same-type params (`store, key string` not `store string, key string`).
 - **Network binding**: gRPC listeners bind to `127.0.0.1` to avoid gosec G102.
+
+## Upgrade Backlog
+
+Items surfaced by `/upgrade-analysis` that are not immediately actionable. Review on next upgrade cycle.
+
+- [ ] Pin `ubuntu-latest` to `ubuntu-24.04` in CI workflows for fully reproducible builds — currently resolves correctly but will shift when GitHub promotes 26.04
+- [ ] Add `DAPR_CLI_VERSION` to Makefile if `dapr-init` or `dapr-run` targets are ever added (latest stable: v1.17.0)
+
+*Last reviewed: 2026-04-03*
 
 ## Skills
 
