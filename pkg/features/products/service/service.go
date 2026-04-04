@@ -81,11 +81,11 @@ func (s *Service) RegisterTopicEventHandlers(register dapr.RegisterEventHandler)
 }
 
 func (s *Service) SaveGRPC(ctx context.Context, in *pb.TopicEventRequest) (*pb.TopicEventResponse, error) {
-	var gadget products.Product
-	if err := json.Unmarshal(in.Data, &gadget); err != nil {
+	var product products.Product
+	if err := json.Unmarshal(in.Data, &product); err != nil {
 		return nil, err
 	}
-	if err := s.store.Save(ctx, &gadget); err != nil {
+	if err := s.store.Save(ctx, &product); err != nil {
 		return nil, err
 	}
 

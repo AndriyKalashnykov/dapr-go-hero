@@ -18,7 +18,7 @@ const (
 	port = "127.0.0.1:50151"
 )
 
-// server is used to implement helloworld.GreeterServer.
+// server implements the Products gRPC service with an in-memory store.
 type server struct {
 	pb.UnimplementedProductsServer
 	sync.RWMutex
