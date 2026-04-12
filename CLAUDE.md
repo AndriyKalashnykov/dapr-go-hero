@@ -167,6 +167,14 @@ Regenerate gRPC code after modifying `proto/products/products.proto`:
 protoc --go_out=. --go-grpc_out=. --go_opt=paths=source_relative --go-grpc_opt=paths=source_relative proto/products/products.proto
 ```
 
+## Static Analysis
+
+The `make lint` composite gate runs:
+- **golangci-lint** (includes gocritic via `.golangci.yml`)
+- **mermaid-cli** (Mermaid diagram validation via `minlag/mermaid-cli` Docker image — catches broken diagrams in `README.md`, `CLAUDE.md`, `docs/*.md` before they render as red error boxes on github.com)
+
+`make sec` runs **gosec** (excludes generated `proto/` dir).
+
 ## Code Quality Conventions
 
 - **Build gate**: `make ci` runs lint → sec → test → build. All must pass with zero issues.

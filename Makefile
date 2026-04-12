@@ -1,4 +1,5 @@
 .DEFAULT_GOAL := help
+SHELL          := /bin/bash
 
 APP_NAME       := dapr-go-hero
 CURRENTTAG     := $(shell git describe --tags --abbrev=0 2>/dev/null || echo "dev")
@@ -20,6 +21,8 @@ KIND_NODE_IMAGE       := v1.35.0
 METALLB_VERSION       := 0.15.3
 # renovate: datasource=github-releases depName=hadolint/hadolint
 HADOLINT_VERSION      := 2.12.0
+# renovate: datasource=docker depName=minlag/mermaid-cli
+MERMAID_CLI_VERSION   := 11.12.0
 
 # === Docker / K8s Config ===
 CLUSTER_NAME   := dapr-go-hero
@@ -108,9 +111,38 @@ clean:
 	@rm -f ./cmd/inventory/main ./cmd/products/products
 	@echo "Build artifacts removed."
 
-#lint: @ Run golangci-lint (includes gocritic via .golangci.yml)
-lint: deps
+#lint: @ Run golangci-lint + mermaid-lint
+lint: deps mermaid-lint
 	@$(call go-exec,golangci-lint run ./...)
+
+#mermaid-lint: @ Validate Mermaid diagrams in markdown files (Docker-based, portable)
+mermaid-lint:
+	@command -v docker >/dev/null 2>&1 || { echo "ERROR: docker is required for mermaid-lint"; exit 1; }
+	@set -euo pipefail; \
+	MD_FILES=$$(grep -lF '```mermaid' README.md CLAUDE.md docs/*.md 2>/dev/null || true); \
+	if [ -z "$$MD_FILES" ]; then \
+		echo "No Mermaid blocks found — skipping."; \
+		exit 0; \
+	fi; \
+	FAILED=0; \
+	for md in $$MD_FILES; do \
+		echo "Validating Mermaid blocks in $$md..."; \
+		LOG=$$(mktemp); \
+		if docker run --rm -v "$$PWD:/data" \
+			minlag/mermaid-cli:$(MERMAID_CLI_VERSION) \
+			-i "/data/$$md" -o "/tmp/$$(basename $$md .md).svg" >"$$LOG" 2>&1; then \
+			echo "  ✓ All blocks rendered cleanly."; \
+		else \
+			echo "  ✗ Parse error in $$md:"; \
+			sed 's/^/    /' "$$LOG"; \
+			FAILED=$$((FAILED + 1)); \
+		fi; \
+		rm -f "$$LOG"; \
+	done; \
+	if [ "$$FAILED" -gt 0 ]; then \
+		echo "Mermaid lint: $$FAILED file(s) had parse errors."; \
+		exit 1; \
+	fi
 
 #sec: @ Run gosec security scanner
 sec: deps
@@ -342,4 +374,5 @@ e2e-teardown: k8s-undeploy kind-down
 	generate-env \
 	docker-build docker-push docker-lint deps-hadolint \
 	kind-up kind-down k8s-deploy k8s-undeploy k8s-status \
-	e2e e2e-setup e2e-teardown
+	e2e e2e-setup e2e-teardown \
+	mermaid-lint

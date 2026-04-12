@@ -26,6 +26,10 @@ vendor
 .idea
 dist/
 main
-cmd/products/products.claude/
+cmd/products/products
+.claude/
 cmd/*/products
 cmd/*/main
+node_modules/
+package.json
+package-lock.json
