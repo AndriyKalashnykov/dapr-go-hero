@@ -253,7 +253,7 @@ Service Invocation to the Products service uses a generated gRPC client pointed 
 ### Cluster Topology
 
 ```mermaid
-%%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif, system-ui, sans-serif','primaryColor':'#0070E5','primaryTextColor':'#fff','primaryBorderColor':'#1E3A5F','lineColor':'#1E3A5F','clusterBkg':'#E8E8E8','clusterBorder':'#6B7280'}}}%%
+%%{init: {'theme':'base','themeVariables':{'background':'#FFFFFF','fontFamily':'ui-sans-serif, system-ui, sans-serif','primaryColor':'#0070E5','primaryTextColor':'#FFFFFF','primaryBorderColor':'#1E3A5F','secondaryColor':'#FFFFFF','tertiaryColor':'#FFFFFF','lineColor':'#1E3A5F','edgeLabelBackground':'#FFFFFF','labelTextColor':'#1E3A5F','tertiaryBorderColor':'#1E3A5F','tertiaryTextColor':'#1E3A5F','clusterBkg':'#E8E8E8','clusterBorder':'#6B7280','titleColor':'#1E3A5F'}}}%%
 graph TB
   subgraph Client["External (host)"]
     C[curl / browser]
@@ -328,7 +328,7 @@ graph TB
 ### Event Flow (CloudEvent → 3 routes)
 
 ```mermaid
-%%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif, system-ui, sans-serif','primaryColor':'#0070E5','primaryTextColor':'#fff','primaryBorderColor':'#1E3A5F','actorBkg':'#E8E8E8','actorBorder':'#1E3A5F','actorTextColor':'#1E3A5F','actorLineColor':'#1E3A5F','signalColor':'#1E3A5F','signalTextColor':'#1E3A5F','labelBoxBkgColor':'#CEE3F6','labelBoxBorderColor':'#0070E5','labelTextColor':'#1E3A5F','loopTextColor':'#1E3A5F','noteBkgColor':'#CEE3F6','noteBorderColor':'#0070E5','noteTextColor':'#1E3A5F','altBackground':'#F5F7FA'}}}%%
+%%{init: {'theme':'base','themeVariables':{'background':'#FFFFFF','fontFamily':'ui-sans-serif, system-ui, sans-serif','primaryColor':'#FFFFFF','primaryTextColor':'#1E3A5F','primaryBorderColor':'#1E3A5F','actorBkg':'#FFFFFF','actorBorder':'#1E3A5F','actorTextColor':'#1E3A5F','actorLineColor':'#1E3A5F','signalColor':'#1E3A5F','signalTextColor':'#1E3A5F','labelBoxBkgColor':'#1E3A5F','labelBoxBorderColor':'#1E3A5F','labelTextColor':'#FFFFFF','loopTextColor':'#1E3A5F','noteBkgColor':'#FFFFFF','noteBorderColor':'#1E3A5F','noteTextColor':'#1E3A5F','altBackground':'#FFFFFF','activationBkgColor':'#1E3A5F','activationBorderColor':'#0C2340','sequenceNumberColor':'#FFFFFF'}}}%%
 sequenceDiagram
   autonumber
   actor Pub as Publisher<br/>(curl / make send-*)
@@ -340,21 +340,27 @@ sequenceDiagram
   participant PDaprd as products daprd
   participant PApp as products app
 
-  Pub->>IDaprd: POST /v1.0/publish/pubsub/inventory<br/>CloudEvent (type=widget.v1)
+  Pub->>+IDaprd: POST /v1.0/publish/pubsub/inventory<br/>CloudEvent (type=widget.v1)
   IDaprd->>Redis: XADD inventory
   Redis-->>IDaprd: deliver to subscribers
-  IDaprd->>IApp: route by event.type
+  IDaprd->>+IApp: route by event.type
 
   alt widget.v1 → /widgets.v1
-    IApp->>PG: INSERT widget (via Secret Store creds)
+    IApp->>+PG: INSERT widget (via Secret Store creds)
+    PG-->>-IApp: ok
   else gadget.v1 → /gadgets.v1
-    IApp->>RState: SET gadget:id
+    IApp->>+RState: SET gadget:id
+    RState-->>-IApp: ok
   else default → /products.v1 (thingamajig)
     IApp->>IDaprd: gRPC SaveProduct<br/>header dapr-app-id: products.dapr-go-hero-products
-    IDaprd->>PDaprd: invoke (cross-namespace name resolution)
-    PDaprd->>PApp: SaveProduct RPC
-    PApp-->>PDaprd: empty response
+    IDaprd->>+PDaprd: invoke (cross-namespace name resolution)
+    PDaprd->>+PApp: SaveProduct RPC
+    PApp-->>-PDaprd: empty response
+    PDaprd-->>-IDaprd: ok
   end
+
+  IApp-->>-IDaprd: 204 No Content
+  IDaprd-->>-Pub: 204 No Content
 
   Note over IDaprd,PDaprd: All hops traced → Zipkin
 ```
