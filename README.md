@@ -252,118 +252,29 @@ Service Invocation to the Products service uses a generated gRPC client pointed 
 
 ### Cluster Topology
 
-```mermaid
-%%{init: {'theme':'base','themeVariables':{'background':'#FFFFFF','fontFamily':'ui-sans-serif, system-ui, sans-serif','primaryColor':'#0070E5','primaryTextColor':'#FFFFFF','primaryBorderColor':'#1E3A5F','secondaryColor':'#FFFFFF','tertiaryColor':'#FFFFFF','lineColor':'#1E3A5F','edgeLabelBackground':'#FFFFFF','labelTextColor':'#1E3A5F','tertiaryBorderColor':'#1E3A5F','tertiaryTextColor':'#1E3A5F','clusterBkg':'#E8E8E8','clusterBorder':'#6B7280','titleColor':'#1E3A5F'}}}%%
-graph TB
-  subgraph Client["External (host)"]
-    C[curl / browser]
-  end
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/d1-dark.png">
+  <img alt="Cluster topology" src="docs/images/d1-light.png">
+</picture>
 
-  subgraph Cluster["KinD cluster"]
-    subgraph MetalLB["metallb-system"]
-      ML[MetalLB L2]
-    end
+<details><summary>Mermaid source</summary>
 
-    subgraph DaprSystem["dapr-system"]
-      DS[Dapr control plane<br/>Operator · Sentry · Placement<br/>Scheduler · Sidecar Injector]
-      DD[Dapr Dashboard]
-    end
+See [`docs/images/d1-light.mmd`](docs/images/d1-light.mmd) and [`docs/images/d1-dark.mmd`](docs/images/d1-dark.mmd). PNGs are pre-rendered to guarantee consistent appearance across GitHub light/dark themes; rebuild via `make mermaid-render` after editing either source.
 
-    subgraph Infra["dapr-go-hero (infrastructure)"]
-      R[(Redis<br/>6379)]
-      P[(PostgreSQL<br/>5432)]
-      Z[Zipkin<br/>9411]
-    end
-
-    subgraph InvNS["dapr-go-hero-inventory"]
-      ISVC{{Service LB :3000}}
-      IPOD[inventory pod<br/>app + daprd sidecar]
-      ISEC[[Secret: postgres]]
-      ISA((ServiceAccount<br/>+ secret-reader Role))
-      ICRD[Dapr CRDs:<br/>pubsub, statestore,<br/>secretstore, subscription,<br/>resiliency, configuration]
-    end
-
-    subgraph ProdNS["dapr-go-hero-products"]
-      PSVC{{Service :50151}}
-      PPOD[products pod<br/>app + daprd sidecar]
-      PSA((ServiceAccount))
-      PCRD[Dapr CRD:<br/>configuration]
-    end
-
-    ML -.assigns LB IP.-> ISVC
-    C -->|HTTP :3000| ISVC --> IPOD
-
-    IPOD -->|pub/sub| R
-    IPOD -->|state| R
-    IPOD -->|SQL| P
-    IPOD -->|GetSecret kubernetes| ISEC
-    IPOD -.->|traces| Z
-    PPOD -.->|traces| Z
-
-    IPOD ==>|"gRPC via Dapr<br/>(fully-qualified app ID)"| PPOD
-
-    DS -.manages.-> IPOD
-    DS -.manages.-> PPOD
-    ISA -.grants.-> IPOD
-    PSA -.grants.-> PPOD
-    ICRD -.configures.-> IPOD
-    PCRD -.configures.-> PPOD
-  end
-
-  classDef external fill:#E8E8E8,stroke:#1E3A5F,color:#1E3A5F,stroke-width:1px
-  classDef metallb fill:#6B7280,stroke:#374151,color:#fff,stroke-width:1px
-  classDef daprControl fill:#0070E5,stroke:#1E3A5F,color:#fff,stroke-width:1px
-  classDef infra fill:#4A7BB0,stroke:#1E3A5F,color:#fff,stroke-width:1px
-  classDef appPod fill:#1E3A5F,stroke:#0C2340,color:#fff,stroke-width:1px
-  classDef k8sResource fill:#CEE3F6,stroke:#0070E5,color:#1E3A5F,stroke-width:1px
-
-  class C external
-  class ML metallb
-  class DS,DD daprControl
-  class R,P,Z infra
-  class ISVC,IPOD,PSVC,PPOD appPod
-  class ISEC,ISA,ICRD,PSA,PCRD k8sResource
-```
+</details>
 
 ### Event Flow (CloudEvent → 3 routes)
 
-```mermaid
-%%{init: {'theme':'base','themeVariables':{'background':'#FFFFFF','fontFamily':'ui-sans-serif, system-ui, sans-serif','primaryColor':'#FFFFFF','primaryTextColor':'#1E3A5F','primaryBorderColor':'#1E3A5F','actorBkg':'#FFFFFF','actorBorder':'#1E3A5F','actorTextColor':'#1E3A5F','actorLineColor':'#1E3A5F','signalColor':'#1E3A5F','signalTextColor':'#1E3A5F','labelBoxBkgColor':'#1E3A5F','labelBoxBorderColor':'#1E3A5F','labelTextColor':'#FFFFFF','loopTextColor':'#1E3A5F','noteBkgColor':'#FFFFFF','noteBorderColor':'#1E3A5F','noteTextColor':'#1E3A5F','altBackground':'#FFFFFF','activationBkgColor':'#1E3A5F','activationBorderColor':'#0C2340','sequenceNumberColor':'#FFFFFF'}}}%%
-sequenceDiagram
-  autonumber
-  actor Pub as Publisher<br/>(curl / make send-*)
-  participant IDaprd as inventory daprd
-  participant Redis as Redis pub/sub
-  participant IApp as inventory app
-  participant PG as PostgreSQL
-  participant RState as Redis state
-  participant PDaprd as products daprd
-  participant PApp as products app
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/d2-dark.png">
+  <img alt="Event flow (CloudEvent → 3 routes)" src="docs/images/d2-light.png">
+</picture>
 
-  Pub->>+IDaprd: POST /v1.0/publish/pubsub/inventory<br/>CloudEvent (type=widget.v1)
-  IDaprd->>Redis: XADD inventory
-  Redis-->>IDaprd: deliver to subscribers
-  IDaprd->>+IApp: route by event.type
+<details><summary>Mermaid source</summary>
 
-  alt widget.v1 → /widgets.v1
-    IApp->>+PG: INSERT widget (via Secret Store creds)
-    PG-->>-IApp: ok
-  else gadget.v1 → /gadgets.v1
-    IApp->>+RState: SET gadget:id
-    RState-->>-IApp: ok
-  else default → /products.v1 (thingamajig)
-    IApp->>IDaprd: gRPC SaveProduct<br/>header dapr-app-id: products.dapr-go-hero-products
-    IDaprd->>+PDaprd: invoke (cross-namespace name resolution)
-    PDaprd->>+PApp: SaveProduct RPC
-    PApp-->>-PDaprd: empty response
-    PDaprd-->>-IDaprd: ok
-  end
+See [`docs/images/d2-light.mmd`](docs/images/d2-light.mmd) and [`docs/images/d2-dark.mmd`](docs/images/d2-dark.mmd). Rebuild via `make mermaid-render`.
 
-  IApp-->>-IDaprd: 204 No Content
-  IDaprd-->>-Pub: 204 No Content
-
-  Note over IDaprd,PDaprd: All hops traced → Zipkin
-```
+</details>
 
 ### Namespace Isolation
 

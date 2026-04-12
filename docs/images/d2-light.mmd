@@ -1,0 +1,35 @@
+%%{init: {'theme':'base','themeVariables':{'background':'#FFFFFF','fontFamily':'ui-sans-serif, system-ui, sans-serif','primaryColor':'#FFFFFF','primaryTextColor':'#1E3A5F','primaryBorderColor':'#1E3A5F','actorBkg':'#FFFFFF','actorBorder':'#1E3A5F','actorTextColor':'#1E3A5F','actorLineColor':'#1E3A5F','signalColor':'#1E3A5F','signalTextColor':'#1E3A5F','labelBoxBkgColor':'#1E3A5F','labelBoxBorderColor':'#1E3A5F','labelTextColor':'#FFFFFF','loopTextColor':'#1E3A5F','noteBkgColor':'#FFFFFF','noteBorderColor':'#1E3A5F','noteTextColor':'#1E3A5F','altBackground':'#FFFFFF','activationBkgColor':'#1E3A5F','activationBorderColor':'#0C2340','sequenceNumberColor':'#FFFFFF'}}}%%
+sequenceDiagram
+  autonumber
+  actor Pub as Publisher<br/>(curl / make send-*)
+  participant IDaprd as inventory daprd
+  participant Redis as Redis pub/sub
+  participant IApp as inventory app
+  participant PG as PostgreSQL
+  participant RState as Redis state
+  participant PDaprd as products daprd
+  participant PApp as products app
+
+  Pub->>+IDaprd: POST /v1.0/publish/pubsub/inventory<br/>CloudEvent (type=widget.v1)
+  IDaprd->>Redis: XADD inventory
+  Redis-->>IDaprd: deliver to subscribers
+  IDaprd->>+IApp: route by event.type
+
+  alt widget.v1 → /widgets.v1
+    IApp->>+PG: INSERT widget (via Secret Store creds)
+    PG-->>-IApp: ok
+  else gadget.v1 → /gadgets.v1
+    IApp->>+RState: SET gadget:id
+    RState-->>-IApp: ok
+  else default → /products.v1 (thingamajig)
+    IApp->>IDaprd: gRPC SaveProduct<br/>header dapr-app-id: products.dapr-go-hero-products
+    IDaprd->>+PDaprd: invoke (cross-namespace name resolution)
+    PDaprd->>+PApp: SaveProduct RPC
+    PApp-->>-PDaprd: empty response
+    PDaprd-->>-IDaprd: ok
+  end
+
+  IApp-->>-IDaprd: 204 No Content
+  IDaprd-->>-Pub: 204 No Content
+
+  Note over IDaprd,PDaprd: All hops traced → Zipkin
