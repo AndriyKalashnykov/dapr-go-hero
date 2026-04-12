@@ -17,8 +17,8 @@ GO_VERSION := $(shell grep -oP '^go \K[0-9.]+' go.mod)
 
 # Helper: run a command under the correct Go version.
 # mise (preferred) auto-activates via shell hook; actions/setup-go handles CI.
-# Legacy gvm fallback kept for transition period.
-HAS_GVM := $(shell [ -s "$$HOME/.gvm/scripts/gvm" ] && echo true || echo false)
+# Legacy gvm fallback kept for transition period — skipped in CI ($CI is set).
+HAS_GVM := $(shell [ -z "$$CI" ] && [ -s "$$HOME/.gvm/scripts/gvm" ] && echo true || echo false)
 define go-exec
 $(if $(filter true,$(HAS_GVM)),bash -c '. $$GVM_ROOT/scripts/gvm && gvm use go$(GO_VERSION) >/dev/null && $(1)',bash -c '$(1)')
 endef
