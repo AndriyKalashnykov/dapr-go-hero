@@ -112,7 +112,7 @@ CloudEvents published to Dapr PubSub → Dapr routes by `event.type` → appropr
 | 3001 | Custom HTTP Dapr callbacks |
 | 3002 | SDK HTTP Dapr callbacks |
 | 3500 | Dapr sidecar HTTP |
-| 4001 | Custom gRPC Dapr callbacks (127.0.0.1 only) |
+| 4001 | Custom gRPC Dapr callbacks |
 | 4002 | SDK gRPC Dapr callbacks |
 | 50151 | Products gRPC service |
 
@@ -183,7 +183,7 @@ The `make lint` composite gate runs:
 - **gRPC APIs**: Use `grpc.NewClient` (not `grpc.Dial`/`DialContext`). Use `insecure.NewCredentials()` (not `grpc.WithInsecure()`).
 - **Error returns**: All error returns must be checked (`errcheck`). Use `_ =` for intentionally ignored errors in cleanup paths.
 - **Parameter style**: Combine consecutive same-type params (`store, key string` not `store string, key string`).
-- **Network binding**: gRPC listeners bind to `127.0.0.1` to avoid gosec G102.
+- **Network binding**: gRPC listeners bind to `0.0.0.0` for K8s sidecar reachability, with `#nosec G102` annotations and justification. Listen addresses are configurable via env vars defined in `pkg/config/config.go`.
 
 ## Upgrade Backlog
 

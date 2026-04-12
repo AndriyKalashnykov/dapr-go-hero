@@ -16,6 +16,22 @@ Dapr, at its core, is a set of building block APIs that abstract away common tas
 * State store
 * Service Invocation (with discovery and tracing)
 
+## Tech Stack
+
+| Component | Technology |
+|-----------|-----------|
+| Language | Go 1.26.2 |
+| Dapr runtime | v1.17.4 |
+| HTTP framework | Fiber v3 |
+| Database | PostgreSQL (via pgx v5) |
+| State / Pub-Sub | Redis |
+| RPC | gRPC + Protobuf |
+| Container | Docker (multi-stage Alpine, BuildKit) |
+| Orchestration | Kubernetes + KinD + MetalLB |
+| Observability | Zipkin (distributed tracing) |
+| Code quality | golangci-lint, gosec, hadolint, mermaid-cli |
+| Dependency updates | Renovate |
+
 ## Quick Start
 
 Two modes are supported: **local dev** (standalone binaries + `dapr run`) and **Kubernetes** (KinD + MetalLB + Dapr + all services in containers).
@@ -76,6 +92,7 @@ See [Running the demo locally](#running-the-demo-locally) for the full PostgreSQ
 
 | Tool | Version | Purpose |
 |------|---------|---------|
+| [Git](https://git-scm.com/) | 2.0+ | Version control |
 | [Go](https://go.dev/dl/) | 1.26.2+ | Language runtime and compiler (auto-installed via [mise](https://mise.jdx.dev)) |
 | [GNU Make](https://www.gnu.org/software/make/) | 3.81+ | Build orchestration |
 | [Docker](https://www.docker.com/) | latest w/ BuildKit | Container builds and local runtimes |
@@ -127,8 +144,9 @@ Run `make help` to see all available targets.
 
 | Target | Description |
 |--------|-------------|
-| `make lint` | Run golangci-lint (includes gocritic via .golangci.yml) |
+| `make lint` | Run golangci-lint (includes gocritic) + `mermaid-lint` |
 | `make sec` | Run gosec security scanner |
+| `make mermaid-lint` | Validate Mermaid diagrams in README.md / CLAUDE.md / docs/*.md via `minlag/mermaid-cli` Docker image |
 
 ### CI
 
