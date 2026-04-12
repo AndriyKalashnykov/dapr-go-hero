@@ -1,13 +1,12 @@
 module github.com/AndriyKalashnykov/dapr-go-hero
 
-go 1.26.1
+go 1.26.2
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.3
-	github.com/dapr/dapr v1.17.3
+	github.com/dapr/dapr v1.17.4
 	github.com/dapr/go-sdk v1.14.2
 	github.com/go-logr/logr v1.4.3
-	github.com/go-logr/zapr v1.3.0
 	github.com/gofiber/fiber/v3 v3.1.0
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/oklog/run v1.2.0

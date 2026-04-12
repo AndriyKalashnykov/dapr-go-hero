@@ -10,13 +10,14 @@ GOLANGCI_LINT_VERSION := 2.11.4
 ACT_VERSION           := 0.2.87
 NVM_VERSION           := 0.40.4
 NODE_VERSION          := 24
-GVM_SHA               := dd652539fa4b771840846f8319fad303c7d0a8d2 # v1.0.22
+MISE_VERSION          := 2026.4.10
 
 # === Go Version Management ===
-GO_VERSIONS := $(shell find . -name 'go.mod' -exec grep -oP '^go \K[0-9.]+' {} \; | sort -uV)
-GO_VERSION  := $(shell grep -oP '^go \K[0-9.]+' go.mod)
+GO_VERSION := $(shell grep -oP '^go \K[0-9.]+' go.mod)
 
-# Helper: run a command under the correct Go version via gvm (local) or directly (CI)
+# Helper: run a command under the correct Go version.
+# mise (preferred) auto-activates via shell hook; actions/setup-go handles CI.
+# Legacy gvm fallback kept for transition period.
 HAS_GVM := $(shell [ -s "$$HOME/.gvm/scripts/gvm" ] && echo true || echo false)
 define go-exec
 $(if $(filter true,$(HAS_GVM)),bash -c '. $$GVM_ROOT/scripts/gvm && gvm use go$(GO_VERSION) >/dev/null && $(1)',bash -c '$(1)')
@@ -30,25 +31,20 @@ help:
 
 #deps: @ Install required tool dependencies (idempotent)
 deps:
-	@# Install gvm if not present (local development only, CI uses actions/setup-go)
-	@if [ -z "$$CI" ] && [ ! -s "$$HOME/.gvm/scripts/gvm" ]; then \
-		echo "Installing gvm (Go Version Manager)..."; \
-		curl -s -S -L https://raw.githubusercontent.com/moovweb/gvm/$(GVM_SHA)/binscripts/gvm-installer | bash -s $(GVM_SHA); \
+	@# Install mise if not present (local development only, CI uses actions/setup-go)
+	@if [ -z "$$CI" ] && ! command -v mise >/dev/null 2>&1; then \
+		echo "Installing mise v$(MISE_VERSION)..."; \
+		curl -fsSL https://mise.jdx.dev/install.sh | MISE_VERSION=v$(MISE_VERSION) bash; \
 		echo ""; \
-		echo "gvm installed. Please restart your shell or run:"; \
-		echo "  source $$HOME/.gvm/scripts/gvm"; \
-		echo "Then re-run 'make deps' to install Go $(GO_VERSION) via gvm."; \
+		echo "mise installed. Activate it in your shell:"; \
+		echo '  echo '\''eval "$$(mise activate)"'\'' >> ~/.bashrc'; \
+		echo "Then re-run 'make deps'."; \
 		exit 0; \
 	fi
-	@if [ "$(HAS_GVM)" = "true" ]; then \
-		for v in $(GO_VERSIONS); do \
-			bash -c '. $$GVM_ROOT/scripts/gvm && gvm list' 2>/dev/null | grep -q "go$$v" || { \
-				echo "Installing Go $$v via gvm..."; \
-				bash -c '. $$GVM_ROOT/scripts/gvm && gvm install go'"$$v"' -B'; \
-			}; \
-		done; \
+	@if [ -z "$$CI" ] && command -v mise >/dev/null 2>&1; then \
+		mise install --yes; \
 	else \
-		command -v go >/dev/null 2>&1 || { echo "Error: Go required. Install gvm from https://github.com/moovweb/gvm or Go from https://go.dev/dl/"; exit 1; }; \
+		command -v go >/dev/null 2>&1 || { echo "Error: Go required. Install mise (https://mise.jdx.dev) or Go (https://go.dev/dl/)"; exit 1; }; \
 	fi
 	@$(call go-exec,command -v gosec) >/dev/null 2>&1 || { echo "Installing gosec v$(GOSEC_VERSION)..."; \
 		$(call go-exec,go install github.com/securego/gosec/v2/cmd/gosec@v$(GOSEC_VERSION)); }
@@ -62,13 +58,12 @@ deps-act: deps
 		curl -sSfL https://raw.githubusercontent.com/nektos/act/v$(ACT_VERSION)/install.sh | sudo bash -s -- -b /usr/local/bin v$(ACT_VERSION); \
 	}
 
-#deps-check: @ Show required Go versions and gvm status
+#deps-check: @ Show Go version and mise tool status
 deps-check:
-	@echo "Go versions required: $(GO_VERSIONS)"
-	@echo "Primary Go version:   $(GO_VERSION)"
-	@[ -s "$$HOME/.gvm/scripts/gvm" ] && { \
-		bash -c '. $$GVM_ROOT/scripts/gvm && gvm list'; \
-	} || echo "gvm not installed — install from https://github.com/moovweb/gvm"
+	@echo "Go version (go.mod): $(GO_VERSION)"
+	@command -v mise >/dev/null 2>&1 && { \
+		mise list; \
+	} || echo "mise not installed — run 'make deps' to install"
 
 #deps-prune: @ Remove unused and redundant dependencies
 deps-prune:

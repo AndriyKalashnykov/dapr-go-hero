@@ -10,7 +10,7 @@ Educational Go application demonstrating Dapr building blocks (Pub/Sub with rout
 
 ```bash
 make help               # List all available Make targets
-make deps               # Install tool dependencies (gosec, golangci-lint) if missing
+make deps               # Install tool dependencies (mise, gosec, golangci-lint) if missing
 make clean              # Remove build artifacts
 make lint               # Run golangci-lint (includes gocritic via .golangci.yml)
 make sec                # Run gosec security scanner (excludes generated proto/ dir)
@@ -19,7 +19,7 @@ make build              # Compile both binaries (depends on deps only)
 make update             # Update all deps to latest (go get -u ./... && go mod tidy)
 make ci                 # Full CI pipeline: deps → lint → sec → test → build → deps-prune-check
 make ci-run             # Run GitHub Actions workflow locally via act
-make deps-check         # Show required Go versions and gvm status
+make deps-check         # Show Go version and mise tool status
 make deps-prune         # Remove unused and redundant dependencies
 make deps-prune-check   # Verify no prunable dependencies (CI gate)
 make release            # Tag and push a release (runs full build first)
@@ -89,6 +89,7 @@ CloudEvents published to Dapr PubSub → Dapr routes by `event.type` → appropr
 
 - **Fiber v3** — Public HTTP API router (port 3000), separate from Dapr callback ports
 - **pgx v5** — PostgreSQL driver with connection pooling (`pkg/connect/postgres/`)
+- **Logging** — `pkg/log/` provides a minimal `logr.LogSink` backed by zap (replaces `go-logr/zapr`). Used via `log.NewLogger(zapLog)` in `cmd/inventory/main.go`
 - **Secrets** — PostgreSQL credentials fetched from Dapr Secret Store (`secrets.json` for local dev)
 - **Protobuf** — Service definition in `proto/products/products.proto`, generated code committed
 - **gRPC** — Uses `grpc.NewClient` (not deprecated `Dial`/`DialContext`) with `insecure.NewCredentials()`
@@ -145,9 +146,12 @@ protoc --go_out=. --go-grpc_out=. --go_opt=paths=source_relative --go-grpc_opt=p
 Items surfaced by `/upgrade-analysis` that are not immediately actionable. Review on next upgrade cycle.
 
 - [ ] Pin `ubuntu-latest` to `ubuntu-24.04` in CI workflows for fully reproducible builds — currently resolves correctly but will shift when GitHub promotes 26.04
-- [ ] Add `DAPR_CLI_VERSION` to Makefile if `dapr-init` or `dapr-run` targets are ever added (latest stable: v1.17.0)
+- [ ] Add `DAPR_CLI_VERSION` to Makefile if `dapr-init` or `dapr-run` targets are ever added (latest stable: v1.17.1)
+- [ ] Track `pgx/v5` CVEs (GO-2026-4772, GO-2026-4771) — no fix available yet, code not reachable per govulncheck. Upgrade when patched version is released
+- [ ] Cross-project: align `golangci-lint` version in `go-todo-web` (v2.1.6) and `k8s-mcp-example` (v2.11.1) to current 2.11.4
+- [ ] Update CI workflow to use `jdx/mise-action` instead of `actions/setup-go` (deferred — separate `/ci-workflow` task)
 
-*Last reviewed: 2026-04-03*
+*Last reviewed: 2026-04-12*
 
 ## Skills
 
@@ -158,6 +162,6 @@ Use the following skills when working on related files:
 | `Makefile` | `/makefile` |
 | `renovate.json` | `/renovate` |
 | `README.md` | `/readme` |
-| `.github/workflows/*.yml` | `/ci-workflow` |
+| `.github/workflows/*.{yml,yaml}` | `/ci-workflow` |
 
 When spawning subagents, always pass conventions from the respective skill into the agent's prompt.

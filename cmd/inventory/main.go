@@ -13,7 +13,7 @@ import (
 	"github.com/dapr/go-sdk/service/common"
 	dapr_server_grpc "github.com/dapr/go-sdk/service/grpc"
 	dapr_server_http "github.com/dapr/go-sdk/service/http"
-	"github.com/go-logr/zapr"
+	zaplog "github.com/AndriyKalashnykov/dapr-go-hero/pkg/log"
 	"github.com/gofiber/fiber/v3"
 	"github.com/oklog/run"
 	"go.uber.org/zap"
@@ -47,7 +47,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	log := zapr.NewLogger(zapLog)
+	log := zaplog.NewLogger(zapLog)
 
 	clientType := "sdk"
 
