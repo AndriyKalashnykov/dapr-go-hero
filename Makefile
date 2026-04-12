@@ -6,16 +6,22 @@ CURRENTTAG     := $(shell git describe --tags --abbrev=0 2>/dev/null || echo "de
 GOFLAGS        := -mod=mod
 
 # === Tool Versions (pinned) ===
+# renovate: datasource=github-releases depName=securego/gosec
 GOSEC_VERSION         := 2.25.0
+# renovate: datasource=github-releases depName=golangci/golangci-lint
 GOLANGCI_LINT_VERSION := 2.11.4
+# renovate: datasource=github-releases depName=nektos/act
 ACT_VERSION           := 0.2.87
+# renovate: datasource=github-releases depName=nvm-sh/nvm
 NVM_VERSION           := 0.40.4
 NODE_VERSION          := 24
+# renovate: datasource=github-releases depName=jdx/mise
 MISE_VERSION          := 2026.4.10
 
 # === K8s / Docker Versions (pinned) ===
 # renovate: datasource=github-releases depName=kubernetes-sigs/kind
 KIND_VERSION          := 0.31.0
+# Manual: bumped together with KIND_VERSION (see KinD release notes for matching node image)
 KIND_NODE_IMAGE       := v1.35.0
 # renovate: datasource=github-releases depName=metallb/metallb
 METALLB_VERSION       := 0.15.3
