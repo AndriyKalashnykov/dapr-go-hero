@@ -3,13 +3,13 @@ package dapr
 import (
 	"context"
 	"fmt"
-	"os"
 	"path"
 
 	"github.com/gofiber/fiber/v3/client"
 
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/components/secrets"
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/components/state"
+	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/config"
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/errorz"
 )
 
@@ -18,7 +18,7 @@ type HTTP struct{
 }
 
 var (
-	APIURL = fmt.Sprintf("http://127.0.0.1:%s/", os.Getenv("DAPR_HTTP_PORT"))
+	APIURL = fmt.Sprintf("http://127.0.0.1:%s/", config.DaprHTTPPort)
 
 	_ = state.Store((*HTTP)(nil))
 	_ = secrets.Store((*HTTP)(nil))

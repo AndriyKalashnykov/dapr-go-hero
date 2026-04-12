@@ -1,0 +1,42 @@
+# Inventory ServiceAccount + RBAC
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: inventory
+  namespace: dapr-go-hero-inventory
+  labels:
+    app: inventory
+---
+# Allow inventory to read secrets in its namespace (Dapr secretstore.kubernetes)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: secret-reader
+  namespace: dapr-go-hero-inventory
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: inventory-secret-reader
+  namespace: dapr-go-hero-inventory
+subjects:
+  - kind: ServiceAccount
+    name: inventory
+    namespace: dapr-go-hero-inventory
+roleRef:
+  kind: Role
+  name: secret-reader
+  apiGroup: rbac.authorization.k8s.io
+---
+# Products ServiceAccount (minimal permissions — no secrets needed)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: products
+  namespace: dapr-go-hero-products
+  labels:
+    app: products

@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: products
+  namespace: dapr-go-hero-products
+  labels:
+    app: products
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: products
+  template:
+    metadata:
+      labels:
+        app: products
+      annotations:
+        dapr.io/enabled: "true"
+        dapr.io/app-id: "products"
+        dapr.io/app-port: "50151"
+        dapr.io/app-protocol: "grpc"
+        dapr.io/config: "dapr-config"
+        dapr.io/log-level: "info"
+        dapr.io/log-as-json: "true"
+        dapr.io/sidecar-cpu-request: "50m"
+        dapr.io/sidecar-memory-request: "64Mi"
+        dapr.io/sidecar-cpu-limit: "200m"
+        dapr.io/sidecar-memory-limit: "128Mi"
+    spec:
+      serviceAccountName: products
+      containers:
+        - name: products
+          image: dapr-go-hero/products:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: grpc
+              containerPort: 50151
+          env:
+            - name: PRODUCTS_ADDR
+              value: "0.0.0.0:50151"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi

@@ -1,0 +1,80 @@
+// Package config provides environment-based configuration with sensible defaults.
+// All host/port values are configurable for both local development and Kubernetes deployment.
+//
+// On startup, a .env file in the working directory is loaded (if present) using godotenv.
+// Existing environment variables take precedence — .env never overwrites them.
+package config
+
+import (
+	"os"
+
+	"github.com/joho/godotenv"
+)
+
+// defaults is the single source of truth for every config key and its default value.
+// Used at runtime (env fallback) and by GenerateDotenv to keep .env in sync.
+var defaults = []entry{
+	// Inventory service
+	{"PUBLIC_API_ADDR", ":3000", "Fiber REST API listen address"},
+	{"CUSTOM_HTTP_ADDR", ":3001", "Custom HTTP Dapr callback listen address"},
+	{"CUSTOM_GRPC_ADDR", "0.0.0.0:4001", "Custom gRPC Dapr callback listen address"}, // #nosec G102
+	{"SDK_HTTP_ADDR", ":3002", "Dapr Go SDK HTTP service listen address"},
+	{"SDK_GRPC_ADDR", ":4002", "Dapr Go SDK gRPC service listen address"},
+
+	// Products service
+	{"PRODUCTS_ADDR", "0.0.0.0:50151", "Products gRPC service listen address"}, // #nosec G102
+
+	// Dapr sidecar (set automatically by dapr run / K8s sidecar injector)
+	{"DAPR_HTTP_PORT", "3500", "Dapr sidecar HTTP API port"},
+	{"DAPR_GRPC_PORT", "50001", "Dapr sidecar gRPC API port"},
+}
+
+type entry struct {
+	Key     string
+	Default string
+	Comment string
+}
+
+func init() {
+	// Load .env if present; never overwrites existing env vars.
+	_ = godotenv.Load()
+}
+
+// env returns the value of the named environment variable, or fallback if unset/empty.
+func env(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+// Inventory service ports.
+var (
+	PublicAPIAddr  = env("PUBLIC_API_ADDR", ":3000")
+	CustomHTTPAddr = env("CUSTOM_HTTP_ADDR", ":3001")
+	CustomGRPCAddr = env("CUSTOM_GRPC_ADDR", "0.0.0.0:4001") // #nosec G102 -- K8s requires 0.0.0.0
+	SDKHTTPAddr    = env("SDK_HTTP_ADDR", ":3002")
+	SDKGRPCAddr    = env("SDK_GRPC_ADDR", ":4002")
+)
+
+// Products service.
+var (
+	ProductsAddr = env("PRODUCTS_ADDR", "0.0.0.0:50151") // #nosec G102 -- K8s requires 0.0.0.0
+)
+
+// Dapr sidecar ports.
+var (
+	DaprHTTPPort = env("DAPR_HTTP_PORT", "3500")
+	DaprGRPCPort = env("DAPR_GRPC_PORT", "50001")
+)
+
+// Defaults returns all config entries for external tooling (e.g., .env generation).
+func Defaults() []struct {
+	Key, Default, Comment string
+} {
+	out := make([]struct{ Key, Default, Comment string }, len(defaults))
+	for i, e := range defaults {
+		out[i] = struct{ Key, Default, Comment string }{e.Key, e.Default, e.Comment}
+	}
+	return out
+}

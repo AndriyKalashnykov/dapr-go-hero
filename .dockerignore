@@ -1,0 +1,17 @@
+.git
+.github
+.env
+.mise.toml
+.golangci.yml
+.claude
+*.md
+docs/
+messages/
+components/
+config.yaml
+secrets.json
+tables.sql
+k8s/
+kind-config.yaml
+cmd/inventory/main
+cmd/products/products

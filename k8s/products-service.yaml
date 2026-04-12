@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: products
+  namespace: dapr-go-hero-products
+  labels:
+    app: products
+spec:
+  selector:
+    app: products
+  ports:
+    - name: grpc
+      port: 50151
+      targetPort: 50151

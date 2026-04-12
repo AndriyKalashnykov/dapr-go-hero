@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dapr-go-hero
+  labels:
+    app.kubernetes.io/part-of: dapr-go-hero
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dapr-go-hero-inventory
+  labels:
+    app.kubernetes.io/part-of: dapr-go-hero
+    app.kubernetes.io/component: inventory
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dapr-go-hero-products
+  labels:
+    app.kubernetes.io/part-of: dapr-go-hero
+    app.kubernetes.io/component: products

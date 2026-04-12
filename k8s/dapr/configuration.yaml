@@ -1,0 +1,55 @@
+# Configuration for inventory namespace
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: dapr-config
+  namespace: dapr-go-hero-inventory
+spec:
+  tracing:
+    samplingRate: "1"
+    zipkin:
+      endpointAddress: "http://zipkin.dapr-go-hero.svc.cluster.local:9411/api/v2/spans"
+  metric:
+    enabled: true
+  mtls:
+    enabled: true
+    workloadCertTTL: "24h"
+    allowedClockSkew: "15m"
+    controlPlaneTrustDomain: "cluster.local"
+    sentryAddress: "dapr-sentry.dapr-system.svc:443"
+  accessControl:
+    defaultAction: allow
+    trustDomain: "cluster.local"
+    policies:
+      - appId: inventory
+        trustDomain: "cluster.local"
+        namespace: "dapr-go-hero-inventory"
+        defaultAction: allow
+---
+# Configuration for products namespace
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: dapr-config
+  namespace: dapr-go-hero-products
+spec:
+  tracing:
+    samplingRate: "1"
+    zipkin:
+      endpointAddress: "http://zipkin.dapr-go-hero.svc.cluster.local:9411/api/v2/spans"
+  metric:
+    enabled: true
+  mtls:
+    enabled: true
+    workloadCertTTL: "24h"
+    allowedClockSkew: "15m"
+    controlPlaneTrustDomain: "cluster.local"
+    sentryAddress: "dapr-sentry.dapr-system.svc:443"
+  accessControl:
+    defaultAction: allow
+    trustDomain: "cluster.local"
+    policies:
+      - appId: inventory
+        trustDomain: "cluster.local"
+        namespace: "dapr-go-hero-inventory"
+        defaultAction: allow

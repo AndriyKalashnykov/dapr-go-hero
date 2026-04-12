@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
@@ -11,6 +10,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
+	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/config"
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/dapr"
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/errorz"
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/features/products"
@@ -20,7 +20,7 @@ import (
 const daprAppID = "products"
 
 var (
-	GRPCADDRESS = fmt.Sprintf("127.0.0.1:%s", os.Getenv("DAPR_GRPC_PORT"))
+	GRPCADDRESS = fmt.Sprintf("127.0.0.1:%s", config.DaprGRPCPort)
 )
 
 type Repository struct {

@@ -12,6 +12,23 @@ NVM_VERSION           := 0.40.4
 NODE_VERSION          := 24
 MISE_VERSION          := 2026.4.10
 
+# === K8s / Docker Versions (pinned) ===
+# renovate: datasource=github-releases depName=kubernetes-sigs/kind
+KIND_VERSION          := 0.31.0
+KIND_NODE_IMAGE       := v1.35.0
+# renovate: datasource=github-releases depName=metallb/metallb
+METALLB_VERSION       := 0.15.3
+# renovate: datasource=github-releases depName=hadolint/hadolint
+HADOLINT_VERSION      := 2.12.0
+
+# === Docker / K8s Config ===
+CLUSTER_NAME   := dapr-go-hero
+REGISTRY       ?= dapr-go-hero
+TAG            ?= dev
+NS_INFRA       := dapr-go-hero
+NS_INVENTORY   := dapr-go-hero-inventory
+NS_PRODUCTS    := dapr-go-hero-products
+
 # === Go Version Management ===
 GO_VERSION := $(shell grep -oP '^go \K[0-9.]+' go.mod)
 
@@ -210,9 +227,119 @@ renovate-bootstrap:
 renovate-validate: renovate-bootstrap
 	@npx --yes renovate --platform=local
 
+#generate-env: @ Regenerate .env from pkg/config defaults
+generate-env:
+	@$(call go-exec,go run ./cmd/generate-env)
+
+# === Docker ===
+
+#docker-build: @ Build container images for both services
+docker-build:
+	@DOCKER_BUILDKIT=1 docker build -t $(REGISTRY)/inventory:$(TAG) -f Dockerfile.inventory .
+	@DOCKER_BUILDKIT=1 docker build -t $(REGISTRY)/products:$(TAG) -f Dockerfile.products .
+
+#docker-push: @ Push container images to registry
+docker-push:
+	@docker push $(REGISTRY)/inventory:$(TAG)
+	@docker push $(REGISTRY)/products:$(TAG)
+
+#docker-lint: @ Lint Dockerfiles with hadolint
+docker-lint: deps-hadolint
+	@hadolint Dockerfile.inventory Dockerfile.products
+
+#deps-hadolint: @ Install hadolint for Dockerfile linting
+deps-hadolint:
+	@command -v hadolint >/dev/null 2>&1 || { echo "Installing hadolint v$(HADOLINT_VERSION)..."; \
+		curl -sSfL -o /tmp/hadolint "https://github.com/hadolint/hadolint/releases/download/v$(HADOLINT_VERSION)/hadolint-Linux-x86_64"; \
+		chmod +x /tmp/hadolint && sudo mv /tmp/hadolint /usr/local/bin/hadolint; }
+
+# === KinD + K8s ===
+
+#kind-up: @ Create KinD cluster with MetalLB and Dapr
+kind-up:
+	@command -v kind >/dev/null 2>&1 || { echo "Error: kind not installed. Run: go install sigs.k8s.io/kind@v$(KIND_VERSION)"; exit 1; }
+	@command -v kubectl >/dev/null 2>&1 || { echo "Error: kubectl not installed. See: https://kubernetes.io/docs/tasks/tools/"; exit 1; }
+	@kind create cluster --config=kind-config.yaml --name $(CLUSTER_NAME) \
+		--image=kindest/node:$(KIND_NODE_IMAGE) --wait 60s 2>/dev/null || true
+	@echo "=== Installing MetalLB ==="
+	@kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v$(METALLB_VERSION)/config/manifests/metallb-native.yaml
+	@kubectl rollout status deployment/controller -n metallb-system --timeout=180s
+	@kubectl rollout status daemonset/speaker -n metallb-system --timeout=180s
+	@ip_sub=$$(docker network inspect kind -f '{{index .IPAM.Config 0 "Subnet"}}' | awk -F. '{printf "%d.%d\n", $$1, $$2}'); \
+		sed "s/METALLB_IP_SUB/$$ip_sub/g" k8s/metallb-config.yaml | kubectl apply -f -
+	@echo "=== Installing Dapr ==="
+	@command -v dapr >/dev/null 2>&1 || { echo "Error: dapr CLI not installed. See https://docs.dapr.io/getting-started/install-dapr-cli/"; exit 1; }
+	@dapr init -k --wait --timeout 300 2>/dev/null || true
+	@echo "=== Installing Dapr Dashboard ==="
+	@dapr dashboard -k -p 0 2>/dev/null &
+	@echo "=== KinD cluster ready ==="
+
+#kind-down: @ Destroy KinD cluster
+kind-down:
+	@kind delete cluster --name $(CLUSTER_NAME) 2>/dev/null || true
+
+#k8s-deploy: @ Build images, load into KinD, and deploy all manifests
+k8s-deploy: docker-build
+	@kind load docker-image $(REGISTRY)/inventory:$(TAG) --name $(CLUSTER_NAME)
+	@kind load docker-image $(REGISTRY)/products:$(TAG) --name $(CLUSTER_NAME)
+	@echo "=== Applying K8s manifests ==="
+	@kubectl apply -f k8s/namespace.yaml
+	@kubectl apply -f k8s/rbac.yaml
+	@kubectl apply -f k8s/redis.yaml
+	@kubectl apply -f k8s/postgres.yaml
+	@kubectl apply -f k8s/zipkin.yaml
+	@kubectl apply -f k8s/dapr/
+	@kubectl apply -f k8s/inventory-deployment.yaml
+	@kubectl apply -f k8s/inventory-service.yaml
+	@kubectl apply -f k8s/products-deployment.yaml
+	@kubectl apply -f k8s/products-service.yaml
+	@echo "=== Waiting for pods ==="
+	@kubectl rollout status deployment/redis -n $(NS_INFRA) --timeout=120s
+	@kubectl rollout status deployment/postgres -n $(NS_INFRA) --timeout=120s
+	@kubectl rollout status deployment/inventory -n $(NS_INVENTORY) --timeout=180s
+	@kubectl rollout status deployment/products -n $(NS_PRODUCTS) --timeout=180s
+
+#k8s-undeploy: @ Remove all K8s manifests
+k8s-undeploy:
+	@kubectl delete -f k8s/products-service.yaml --ignore-not-found
+	@kubectl delete -f k8s/products-deployment.yaml --ignore-not-found
+	@kubectl delete -f k8s/inventory-service.yaml --ignore-not-found
+	@kubectl delete -f k8s/inventory-deployment.yaml --ignore-not-found
+	@kubectl delete -f k8s/dapr/ --ignore-not-found
+	@kubectl delete -f k8s/zipkin.yaml --ignore-not-found
+	@kubectl delete -f k8s/postgres.yaml --ignore-not-found
+	@kubectl delete -f k8s/redis.yaml --ignore-not-found
+	@kubectl delete -f k8s/rbac.yaml --ignore-not-found
+	@kubectl delete -f k8s/namespace.yaml --ignore-not-found
+
+#k8s-status: @ Show pod and service status across all namespaces
+k8s-status:
+	@echo "=== Infrastructure ($(NS_INFRA)) ==="
+	@kubectl get pods,svc -n $(NS_INFRA) 2>/dev/null || true
+	@echo "=== Inventory ($(NS_INVENTORY)) ==="
+	@kubectl get pods,svc -n $(NS_INVENTORY) 2>/dev/null || true
+	@echo "=== Products ($(NS_PRODUCTS)) ==="
+	@kubectl get pods,svc -n $(NS_PRODUCTS) 2>/dev/null || true
+
+# === E2E ===
+
+#e2e: @ Run end-to-end tests against running K8s cluster
+e2e:
+	@./tests/e2e.sh
+
+#e2e-setup: @ Full setup: create cluster + deploy everything
+e2e-setup: kind-up k8s-deploy
+
+#e2e-teardown: @ Full teardown: undeploy + destroy cluster
+e2e-teardown: k8s-undeploy kind-down
+
 .PHONY: help deps deps-act deps-check deps-prune deps-prune-check \
 	clean lint sec test build run update ci ci-run release \
 	dapr-test run-custom-http run-custom-grpc run-sdk-http run-sdk-grpc run-products \
 	send-widget send-gadget send-thingamajig send-all \
 	get-widget get-gadget get-thingamajig get-all \
-	renovate-bootstrap renovate-validate
+	renovate-bootstrap renovate-validate \
+	generate-env \
+	docker-build docker-push docker-lint deps-hadolint \
+	kind-up kind-down k8s-deploy k8s-undeploy k8s-status \
+	e2e e2e-setup e2e-teardown

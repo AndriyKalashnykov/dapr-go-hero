@@ -11,11 +11,8 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/config"
 	pb "github.com/AndriyKalashnykov/dapr-go-hero/proto/products"
-)
-
-const (
-	port = "127.0.0.1:50151"
 )
 
 // server implements the Products gRPC service with an in-memory store.
@@ -55,7 +52,7 @@ func (s *server) SaveProduct(ctx context.Context, product *pb.Product) (*emptypb
 }
 
 func main() {
-	lis, err := net.Listen("tcp", port)
+	lis, err := net.Listen("tcp", config.ProductsAddr) // #nosec G102 -- bound to 0.0.0.0 for K8s; configurable via PRODUCTS_ADDR
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}

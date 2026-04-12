@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 
 	v1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/components/secrets"
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/components/state"
+	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/config"
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/errorz"
 )
 
@@ -22,7 +22,7 @@ type GRPC struct {
 }
 
 var (
-	GRPCADDRESS = fmt.Sprintf("127.0.0.1:%s", os.Getenv("DAPR_GRPC_PORT"))
+	GRPCADDRESS = fmt.Sprintf("127.0.0.1:%s", config.DaprGRPCPort)
 
 	_ = state.Store((*HTTP)(nil))
 	_ = secrets.Store((*HTTP)(nil))

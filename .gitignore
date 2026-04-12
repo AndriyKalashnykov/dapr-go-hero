@@ -26,4 +26,4 @@ vendor
 .idea
 dist/
 main
-cmd/products/products
+cmd/products/products.claude/

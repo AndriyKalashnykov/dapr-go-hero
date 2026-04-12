@@ -1,0 +1,27 @@
+# syntax=docker/dockerfile:1
+FROM golang:1.26-alpine AS builder
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+COPY . .
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o /products ./cmd/products/main.go
+
+FROM alpine:3.21
+
+# hadolint ignore=DL3018
+RUN apk add --no-cache ca-certificates \
+    && addgroup -S app && adduser -S app -G app
+
+USER app
+
+COPY --from=builder /products /products
+
+EXPOSE 50151
+
+ENTRYPOINT ["/products"]

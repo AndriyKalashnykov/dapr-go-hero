@@ -1,0 +1,46 @@
+apiVersion: dapr.io/v1alpha1
+kind: Resiliency
+metadata:
+  name: inventory-resiliency
+  namespace: dapr-go-hero-inventory
+spec:
+  policies:
+    timeouts:
+      service-invocation: 10s
+      state-operation: 5s
+    retries:
+      state-retry:
+        policy: exponential
+        duration: 100ms
+        maxInterval: 5s
+        maxRetries: 3
+      pubsub-retry:
+        policy: constant
+        duration: 1s
+        maxRetries: 5
+      service-retry:
+        policy: exponential
+        duration: 200ms
+        maxInterval: 10s
+        maxRetries: 3
+    circuitBreakers:
+      products-cb:
+        maxRequests: 1
+        timeout: 10s
+        trip: consecutiveFailures >= 5
+  targets:
+    apps:
+      products:
+        timeout: service-invocation
+        retry: service-retry
+        circuitBreaker: products-cb
+    components:
+      statestore:
+        outbound:
+          timeout: state-operation
+          retry: state-retry
+      pubsub:
+        outbound:
+          retry: pubsub-retry
+scopes:
+  - inventory

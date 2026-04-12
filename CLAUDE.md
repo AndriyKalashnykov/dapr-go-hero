@@ -23,6 +23,16 @@ make deps-check         # Show Go version and mise tool status
 make deps-prune         # Remove unused and redundant dependencies
 make deps-prune-check   # Verify no prunable dependencies (CI gate)
 make release            # Tag and push a release (runs full build first)
+make docker-build       # Build container images (inventory + products)
+make docker-lint        # Lint Dockerfiles with hadolint
+make kind-up            # Create KinD cluster with MetalLB + Dapr + Dashboard
+make kind-down          # Destroy KinD cluster
+make k8s-deploy         # Build images, load into KinD, deploy all manifests
+make k8s-undeploy       # Remove all K8s manifests
+make k8s-status         # Show pod/service status across all namespaces
+make e2e                # Run end-to-end tests against running K8s cluster
+make e2e-setup          # Full setup: kind-up + k8s-deploy
+make e2e-teardown       # Full teardown: k8s-undeploy + kind-down
 ```
 
 Run a single test:
@@ -104,7 +114,31 @@ CloudEvents published to Dapr PubSub → Dapr routes by `event.type` → appropr
 | 3500 | Dapr sidecar HTTP |
 | 4001 | Custom gRPC Dapr callbacks (127.0.0.1 only) |
 | 4002 | SDK gRPC Dapr callbacks |
-| 50151 | Products gRPC service (127.0.0.1 only) |
+| 50151 | Products gRPC service |
+
+All ports are configurable via environment variables defined in `pkg/config/config.go`.
+
+### Kubernetes Deployment
+
+Services deploy into separate namespaces with per-service RBAC:
+
+| Namespace | Contents |
+|-----------|----------|
+| `dapr-go-hero` | Infrastructure (Redis, PostgreSQL, Zipkin) |
+| `dapr-go-hero-inventory` | Inventory deployment + Dapr components (pubsub, statestore, secretstore, subscription, resiliency, configuration) |
+| `dapr-go-hero-products` | Products deployment + Dapr configuration (access control) |
+
+Dapr features demonstrated in K8s manifests (`k8s/dapr/`):
+- **Pub/Sub** with content-based routing (`subscription.yaml`)
+- **State Store** scoped to inventory (`statestore.yaml`)
+- **Secret Store** using K8s native secrets (`secretstore.yaml`)
+- **Resiliency** — retries, timeouts, circuit breakers (`resiliency.yaml`)
+- **Observability** — Zipkin distributed tracing (`configuration.yaml`)
+- **Access Control** — app-level RBAC restricting cross-service calls (`configuration.yaml`)
+
+Container images: `Dockerfile.inventory` and `Dockerfile.products` (multi-stage Alpine + BuildKit cache mounts).
+
+Local cluster: KinD + MetalLB (L2) for LoadBalancer support. `make e2e-setup` creates the full environment.
 
 ## CI/CD
 
@@ -113,8 +147,10 @@ GitHub Actions CI workflow (`.github/workflows/ci.yml`) runs on every push to `m
 | Job | Depends on | Steps |
 |-----|-----------|-------|
 | **static-check** | — | Checkout, Setup Go, Lint, Security, Tidy check |
+| **docker-lint** | — | Checkout, Hadolint on Dockerfiles |
 | **build** | static-check | Checkout, Setup Go, Build |
 | **test** | static-check | Checkout, Setup Go, Test |
+| **e2e** | build, test | KinD cluster, MetalLB, Dapr, build+load images, deploy, run e2e tests |
 
 A separate cleanup workflow (`.github/workflows/cleanup-runs.yml`) removes old workflow runs weekly.
 

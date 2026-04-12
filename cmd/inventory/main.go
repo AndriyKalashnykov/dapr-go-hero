@@ -21,6 +21,7 @@ import (
 
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/components/secrets"
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/components/state"
+	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/config"
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/connect/postgres"
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/dapr"
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/errorz"
@@ -119,7 +120,7 @@ func main() {
 	productRest := products_service.New(log, productRepo)
 
 	// Fiber app config with custom error handler
-	config := fiber.Config{
+	fiberCfg := fiber.Config{
 		ErrorHandler: func(c fiber.Ctx, err error) error {
 			errz := errorz.From(err)
 			return c.Status(errz.Code).JSON(errz)
@@ -129,11 +130,11 @@ func main() {
 	var g run.Group
 	// Public REST API operations
 	{
-		app := fiber.New(config)
+		app := fiber.New(fiberCfg)
 		dapr.RegisterServices(app,
 			widgetRest, gadgetRest, productRest)
 		g.Add(func() error {
-			return app.Listen(":3000")
+			return app.Listen(config.PublicAPIAddr)
 		}, func(err error) {
 			_ = app.Shutdown()
 		})
@@ -171,13 +172,13 @@ func main() {
 
 	// Custom - HTTP events handlers
 	{
-		app := fiber.New(config)
+		app := fiber.New(fiberCfg)
 		dapr.RegisterEventHandlers(app,
 			widgetRest, gadgetRest, productRest)
 		dapr.Subscribe(log, dapr.SubscribeHTTPHandler(log, app),
 			widgetRest, gadgetRest, productRest)
 		g.Add(func() error {
-			return app.Listen(":3001")
+			return app.Listen(config.CustomHTTPAddr)
 		}, func(err error) {
 			_ = app.Shutdown()
 		})
@@ -192,7 +193,7 @@ func main() {
 			widgetRest, gadgetRest, productRest)
 		pb.RegisterAppCallbackServer(gs, server)
 		g.Add(func() error {
-			ln, err := net.Listen("tcp", "127.0.0.1:4001")
+			ln, err := net.Listen("tcp", config.CustomGRPCAddr) // #nosec G102 -- configurable via CUSTOM_GRPC_ADDR
 			if err != nil {
 				return err
 			}
@@ -205,7 +206,7 @@ func main() {
 	{
 		var s common.Service
 		g.Add(func() error {
-			s = dapr_server_http.NewService(":3002")
+			s = dapr_server_http.NewService(config.SDKHTTPAddr)
 			err = errors.Join(
 				widgetRest.RegisterTopicEventHandlersSDK(s),
 				gadgetRest.RegisterTopicEventHandlersSDK(s),
@@ -224,7 +225,7 @@ func main() {
 	{
 		var s common.Service
 		g.Add(func() (err error) {
-			s, err = dapr_server_grpc.NewService(":4002")
+			s, err = dapr_server_grpc.NewService(config.SDKGRPCAddr)
 			if err != nil {
 				return err
 			}

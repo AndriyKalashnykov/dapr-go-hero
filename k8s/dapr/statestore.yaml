@@ -1,0 +1,17 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: statestore
+  namespace: dapr-go-hero-inventory
+spec:
+  type: state.redis
+  version: v1
+  metadata:
+    - name: redisHost
+      value: "redis.dapr-go-hero.svc.cluster.local:6379"
+    - name: redisPassword
+      value: ""
+    - name: actorStateStore
+      value: "true"
+scopes:
+  - inventory
