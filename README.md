@@ -14,7 +14,7 @@ Reference implementation of a Go microservice platform on [Dapr](https://dapr.io
 | Layer | Technology | Rationale |
 |-------|-----------|-----------|
 | Language | Go 1.26 | Static binaries, minimal runtime, strong concurrency primitives |
-| Dapr runtime | v1.17 | Decouples building-block APIs from broker/store implementations |
+| Dapr runtime | v1.17.4 | Decouples building-block APIs from broker/store implementations |
 | HTTP framework | [Fiber v3](https://gofiber.io/) | Fasthttp-backed; lower allocation/request than `net/http` under load |
 | Database driver | [pgx v5](https://github.com/jackc/pgx) | Native Postgres protocol + prepared-statement pooling (no `database/sql` overhead) |
 | Event backbone | Redis Streams (pub/sub) + Redis (state) | Dapr's default low-ceremony broker; swap-in any supported backend via component YAML |
@@ -196,10 +196,13 @@ Run `make help` for the full list.
 | Target | Description |
 |--------|-------------|
 | `make deps` | Install pinned tools (idempotent) |
+| `make deps-act` | Install [act](https://github.com/nektos/act) — auto-invoked by `make ci-run` |
+| `make deps-hadolint` | Install hadolint — auto-invoked by `make docker-lint` |
 | `make deps-check` | Show mise + Go status |
 | `make deps-prune` / `deps-prune-check` | Verify no unused go.mod entries |
 | `make generate-env` | Regenerate `.env` from `pkg/config` defaults |
 | `make release` | Tag and push a new semver release |
+| `make renovate-bootstrap` | Install nvm + Node — auto-invoked by `make renovate-validate` |
 | `make renovate-validate` | Dry-run Renovate config |
 
 ## Design Rationale
@@ -252,29 +255,112 @@ Service Invocation to the Products service uses a generated gRPC client pointed 
 
 ### Cluster Topology
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/d1-dark.png">
-  <img alt="Cluster topology" src="docs/images/d1-light.png">
-</picture>
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'background':'#FFFFFF','fontFamily':'ui-sans-serif, system-ui, sans-serif','primaryColor':'#FFFFFF','primaryTextColor':'#000000','primaryBorderColor':'#000000','secondaryColor':'#FFFFFF','tertiaryColor':'#FFFFFF','lineColor':'#000000','edgeLabelBackground':'#FFFFFF','clusterBkg':'#FFFFFF','clusterBorder':'#000000','titleColor':'#000000'}}}%%
+graph TB
+  subgraph Client["External (host)"]
+    C[curl / browser]
+  end
 
-<details><summary>Mermaid source</summary>
+  subgraph Cluster["KinD cluster"]
+    subgraph MetalLB["metallb-system"]
+      ML[MetalLB L2]
+    end
 
-See [`docs/images/d1-light.mmd`](docs/images/d1-light.mmd) and [`docs/images/d1-dark.mmd`](docs/images/d1-dark.mmd). PNGs are pre-rendered to guarantee consistent appearance across GitHub light/dark themes; rebuild via `make mermaid-render` after editing either source.
+    subgraph DaprSystem["dapr-system"]
+      DS[Dapr control plane<br/>Operator · Sentry · Placement<br/>Scheduler · Sidecar Injector]
+      DD[Dapr Dashboard]
+    end
 
-</details>
+    subgraph Infra["dapr-go-hero (infrastructure)"]
+      R[(Redis<br/>6379)]
+      P[(PostgreSQL<br/>5432)]
+      Z[Zipkin<br/>9411]
+    end
+
+    subgraph InvNS["dapr-go-hero-inventory"]
+      ISVC{{Service LB :3000}}
+      IPOD[inventory pod<br/>app + daprd sidecar]
+      ISEC[[Secret: postgres]]
+      ISA((ServiceAccount<br/>+ secret-reader Role))
+      ICRD[Dapr CRDs:<br/>pubsub, statestore,<br/>secretstore, subscription,<br/>resiliency, configuration]
+    end
+
+    subgraph ProdNS["dapr-go-hero-products"]
+      PSVC{{Service :50151}}
+      PPOD[products pod<br/>app + daprd sidecar]
+      PSA((ServiceAccount))
+      PCRD[Dapr CRD:<br/>configuration]
+    end
+
+    ML -.assigns LB IP.-> ISVC
+    C -->|HTTP :3000| ISVC --> IPOD
+
+    IPOD -->|pub/sub| R
+    IPOD -->|state| R
+    IPOD -->|SQL| P
+    IPOD -->|GetSecret kubernetes| ISEC
+    IPOD -.->|traces| Z
+    PPOD -.->|traces| Z
+
+    IPOD ==>|"gRPC via Dapr<br/>(fully-qualified app ID)"| PPOD
+
+    DS -.manages.-> IPOD
+    DS -.manages.-> PPOD
+    ISA -.grants.-> IPOD
+    PSA -.grants.-> PPOD
+    ICRD -.configures.-> IPOD
+    PCRD -.configures.-> PPOD
+  end
+
+  classDef plain fill:#FFFFFF,stroke:#000000,color:#000000,stroke-width:1px
+  classDef dapr fill:#0070E5,stroke:#000000,color:#FFFFFF,stroke-width:1px
+  classDef emphasis fill:#000000,stroke:#000000,color:#FFFFFF,stroke-width:1px
+
+  class C,ML,R,P,Z,ISEC,ISA,ICRD,PSA,PCRD,ISVC,PSVC plain
+  class DS,DD dapr
+  class IPOD,PPOD emphasis
+```
 
 ### Event Flow (CloudEvent → 3 routes)
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/d2-dark.png">
-  <img alt="Event flow (CloudEvent → 3 routes)" src="docs/images/d2-light.png">
-</picture>
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'background':'#FFFFFF','fontFamily':'ui-sans-serif, system-ui, sans-serif','primaryColor':'#FFFFFF','primaryTextColor':'#000000','primaryBorderColor':'#000000','actorBkg':'#FFFFFF','actorBorder':'#000000','actorTextColor':'#000000','actorLineColor':'#000000','signalColor':'#000000','signalTextColor':'#000000','labelBoxBkgColor':'#0070E5','labelBoxBorderColor':'#000000','labelTextColor':'#FFFFFF','loopTextColor':'#000000','noteBkgColor':'#FFFFFF','noteBorderColor':'#000000','noteTextColor':'#000000','altBackground':'#FFFFFF','activationBkgColor':'#0070E5','activationBorderColor':'#000000','sequenceNumberColor':'#FFFFFF'}}}%%
+sequenceDiagram
+  autonumber
+  actor Pub as Publisher<br/>(curl / make send-*)
+  participant IDaprd as inventory daprd
+  participant Redis as Redis pub/sub
+  participant IApp as inventory app
+  participant PG as PostgreSQL
+  participant RState as Redis state
+  participant PDaprd as products daprd
+  participant PApp as products app
 
-<details><summary>Mermaid source</summary>
+  Pub->>+IDaprd: POST /v1.0/publish/pubsub/inventory<br/>CloudEvent (type=widget.v1)
+  IDaprd->>Redis: XADD inventory
+  Redis-->>IDaprd: deliver to subscribers
+  IDaprd->>+IApp: route by event.type
 
-See [`docs/images/d2-light.mmd`](docs/images/d2-light.mmd) and [`docs/images/d2-dark.mmd`](docs/images/d2-dark.mmd). Rebuild via `make mermaid-render`.
+  alt widget.v1 → /widgets.v1
+    IApp->>+PG: INSERT widget (via Secret Store creds)
+    PG-->>-IApp: ok
+  else gadget.v1 → /gadgets.v1
+    IApp->>+RState: SET gadget:id
+    RState-->>-IApp: ok
+  else default → /products.v1 (thingamajig)
+    IApp->>IDaprd: gRPC SaveProduct<br/>header dapr-app-id: products.dapr-go-hero-products
+    IDaprd->>+PDaprd: invoke (cross-namespace name resolution)
+    PDaprd->>+PApp: SaveProduct RPC
+    PApp-->>-PDaprd: empty response
+    PDaprd-->>-IDaprd: ok
+  end
 
-</details>
+  IApp-->>-IDaprd: 204 No Content
+  IDaprd-->>-Pub: 204 No Content
+
+  Note over IDaprd,PDaprd: All hops traced → Zipkin
+```
 
 ### Namespace Isolation
 

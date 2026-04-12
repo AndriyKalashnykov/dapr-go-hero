@@ -124,49 +124,26 @@ static-check: deps lint sec deps-prune-check
 lint: deps mermaid-lint
 	@$(call go-exec,golangci-lint run ./...)
 
-#mermaid-render: @ Render docs/images/*.mmd sources to PNG (light + dark variants)
-mermaid-render:
-	@command -v docker >/dev/null 2>&1 || { echo "ERROR: docker is required for mermaid-render"; exit 1; }
-	@for f in docs/images/*.mmd; do \
-		[ -f "$$f" ] || continue; \
-		png="$${f%.mmd}.png"; \
-		echo "Rendering $$f → $$png"; \
-		case "$$f" in *d2-*) w=1800 h=1000 ;; *) w=1600 h=1100 ;; esac; \
-		docker run --rm -v "$$PWD/docs/images:/data" --user "$$(id -u):$$(id -g)" \
-			minlag/mermaid-cli:$(MERMAID_CLI_VERSION) \
-			-i "/data/$$(basename $$f)" -o "/data/$$(basename $$png)" -w $$w -H $$h -s 2 --quiet; \
-	done
-	@echo "Done. PNGs in docs/images/"
-
-#mermaid-lint: @ Validate Mermaid diagrams (inline markdown blocks + docs/images/*.mmd sources)
+#mermaid-lint: @ Validate Mermaid diagrams in markdown files (Docker-based, portable)
 mermaid-lint:
 	@command -v docker >/dev/null 2>&1 || { echo "ERROR: docker is required for mermaid-lint"; exit 1; }
 	@set -euo pipefail; \
-	FAILED=0; \
 	MD_FILES=$$(grep -lF '```mermaid' README.md CLAUDE.md docs/*.md 2>/dev/null || true); \
+	if [ -z "$$MD_FILES" ]; then \
+		echo "No Mermaid blocks found — skipping."; \
+		exit 0; \
+	fi; \
+	FAILED=0; \
 	for md in $$MD_FILES; do \
 		echo "Validating Mermaid blocks in $$md..."; \
 		LOG=$$(mktemp); \
 		if docker run --rm -v "$$PWD:/data" \
 			minlag/mermaid-cli:$(MERMAID_CLI_VERSION) \
 			-i "/data/$$md" -o "/tmp/$$(basename $$md .md).svg" >"$$LOG" 2>&1; then \
-			echo "  ✓ OK"; \
+			echo "  ✓ All blocks rendered cleanly."; \
 		else \
-			echo "  ✗ Parse error in $$md:"; sed 's/^/    /' "$$LOG"; \
-			FAILED=$$((FAILED + 1)); \
-		fi; \
-		rm -f "$$LOG"; \
-	done; \
-	for mmd in docs/images/*.mmd; do \
-		[ -f "$$mmd" ] || continue; \
-		echo "Validating $$mmd..."; \
-		LOG=$$(mktemp); \
-		if docker run --rm -v "$$PWD/docs/images:/data" \
-			minlag/mermaid-cli:$(MERMAID_CLI_VERSION) \
-			-i "/data/$$(basename $$mmd)" -o "/tmp/$$(basename $$mmd .mmd).svg" >"$$LOG" 2>&1; then \
-			echo "  ✓ OK"; \
-		else \
-			echo "  ✗ Parse error in $$mmd:"; sed 's/^/    /' "$$LOG"; \
+			echo "  ✗ Parse error in $$md:"; \
+			sed 's/^/    /' "$$LOG"; \
 			FAILED=$$((FAILED + 1)); \
 		fi; \
 		rm -f "$$LOG"; \
@@ -174,8 +151,7 @@ mermaid-lint:
 	if [ "$$FAILED" -gt 0 ]; then \
 		echo "Mermaid lint: $$FAILED file(s) had parse errors."; \
 		exit 1; \
-	fi; \
-	echo "Mermaid lint passed."
+	fi
 
 #sec: @ Run gosec security scanner
 sec: deps
@@ -413,4 +389,4 @@ e2e-teardown: k8s-undeploy kind-down
 	docker-build docker-push docker-lint deps-hadolint \
 	kind-up kind-down k8s-deploy k8s-undeploy k8s-status \
 	e2e e2e-setup e2e-teardown \
-	mermaid-lint mermaid-render
+	mermaid-lint
