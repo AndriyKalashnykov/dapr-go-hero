@@ -117,6 +117,10 @@ clean:
 	@rm -f ./cmd/inventory/main ./cmd/products/products
 	@echo "Build artifacts removed."
 
+#static-check: @ Composite quality gate (lint + sec + mermaid-lint + deps-prune-check)
+static-check: deps lint sec deps-prune-check
+	@echo "Static check passed."
+
 #lint: @ Run golangci-lint + mermaid-lint
 lint: deps mermaid-lint
 	@$(call go-exec,golangci-lint run ./...)
@@ -154,9 +158,14 @@ mermaid-lint:
 sec: deps
 	@$(call go-exec,gosec -exclude-dir=proto ./...)
 
-#test: @ Run tests
+#test: @ Run unit tests (fast, no external deps)
 test: deps
 	@$(call go-exec,export GOFLAGS=$(GOFLAGS) && go test -race -v ./...)
+
+#integration-test: @ Run integration tests (real PostgreSQL via Testcontainers)
+integration-test: deps
+	@command -v docker >/dev/null 2>&1 || { echo "ERROR: docker is required for integration-test"; exit 1; }
+	@$(call go-exec,export GOFLAGS=$(GOFLAGS) && go test -race -tags=integration -v ./...)
 
 #build: @ Build inventory and products binaries
 build: deps
@@ -172,7 +181,7 @@ update: deps
 	@$(call go-exec,export GOFLAGS=$(GOFLAGS) && go get -u ./... && go mod tidy)
 
 #ci: @ Run full local CI pipeline
-ci: deps lint sec test build deps-prune-check
+ci: deps static-check test integration-test build
 	@echo "Local CI pipeline passed."
 
 #ci-run: @ Run GitHub Actions workflow locally using act
@@ -372,7 +381,7 @@ e2e-setup: kind-up k8s-deploy
 e2e-teardown: k8s-undeploy kind-down
 
 .PHONY: help deps deps-act deps-check deps-prune deps-prune-check \
-	clean lint sec test build run update ci ci-run release \
+	clean static-check lint sec test integration-test build run update ci ci-run release \
 	dapr-test run-custom-http run-custom-grpc run-sdk-http run-sdk-grpc run-products \
 	send-widget send-gadget send-thingamajig send-all \
 	get-widget get-gadget get-thingamajig get-all \

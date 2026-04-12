@@ -136,7 +136,8 @@ Run `make help` to see all available targets.
 | Target | Description |
 |--------|-------------|
 | `make build` | Build inventory and products binaries |
-| `make test` | Run tests |
+| `make test` | Run unit tests (fast, no external deps) |
+| `make integration-test` | Run integration tests (real PostgreSQL via Testcontainers) |
 | `make clean` | Remove build artifacts |
 | `make update` | Update dependencies to latest versions |
 
@@ -144,6 +145,7 @@ Run `make help` to see all available targets.
 
 | Target | Description |
 |--------|-------------|
+| `make static-check` | Composite quality gate: lint + sec + mermaid-lint + deps-prune-check |
 | `make lint` | Run golangci-lint (includes gocritic) + `mermaid-lint` |
 | `make sec` | Run gosec security scanner |
 | `make mermaid-lint` | Validate Mermaid diagrams in README.md / CLAUDE.md / docs/*.md via `minlag/mermaid-cli` Docker image |
@@ -459,11 +461,13 @@ GitHub Actions runs on every push to `main`, tags `v*`, pull requests, and `work
 
 | Job | Depends on | Steps |
 |-----|-----------|-------|
-| **static-check** | — | Lint, Security, Tidy check |
+| **static-check** | — | Single `make static-check` step: lint + sec + mermaid-lint + deps-prune-check |
 | **docker-lint** | — | Hadolint on Dockerfiles (parallel with static-check) |
 | **build** | static-check | Build Go binaries |
-| **test** | static-check | Unit + integration tests |
+| **test** | static-check | Unit tests |
+| **integration-test** | static-check | Integration tests (Testcontainers PostgreSQL) |
 | **e2e** | build, test | KinD + MetalLB + Dapr, deploy, run `tests/e2e.sh` |
+| **ci-pass** | all above | Aggregate gate — required check for branch protection |
 
 The `e2e` job provisions a full KinD cluster on every PR, loads images, deploys all manifests, and runs 7 end-to-end assertions against the real Dapr stack.
 

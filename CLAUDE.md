@@ -12,12 +12,14 @@ Educational Go application demonstrating Dapr building blocks (Pub/Sub with rout
 make help               # List all available Make targets
 make deps               # Install tool dependencies (mise, gosec, golangci-lint) if missing
 make clean              # Remove build artifacts
-make lint               # Run golangci-lint (includes gocritic via .golangci.yml)
+make static-check       # Composite quality gate: lint + sec + mermaid-lint + deps-prune-check
+make lint               # Run golangci-lint (includes gocritic) + mermaid-lint
 make sec                # Run gosec security scanner (excludes generated proto/ dir)
-make test               # Run all tests (go test -race -v ./...)
+make test               # Run unit tests (go test -race -v ./...)
+make integration-test   # Run integration tests (real PostgreSQL via Testcontainers)
 make build              # Compile both binaries (depends on deps only)
 make update             # Update all deps to latest (go get -u ./... && go mod tidy)
-make ci                 # Full CI pipeline: deps → lint → sec → test → build → deps-prune-check
+make ci                 # Full CI pipeline: deps → static-check → test → integration-test → build
 make ci-run             # Run GitHub Actions workflow locally via act
 make deps-check         # Show Go version and mise tool status
 make deps-prune         # Remove unused and redundant dependencies
