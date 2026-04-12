@@ -22,7 +22,7 @@ MISE_VERSION          := 2026.4.10
 # renovate: datasource=github-releases depName=kubernetes-sigs/kind
 KIND_VERSION          := 0.31.0
 # Manual: bumped together with KIND_VERSION (see KinD release notes for matching node image)
-KIND_NODE_IMAGE       := v1.35.3
+KIND_NODE_IMAGE       := v1.35.1
 # renovate: datasource=github-releases depName=metallb/metallb
 METALLB_VERSION       := 0.15.3
 # renovate: datasource=github-releases depName=hadolint/hadolint
