@@ -40,6 +40,12 @@ var defaults = []entry{
     // --- Dapr sidecar ports (standard defaults — usually no need to change) ---
     {"DAPR_HTTP_PORT", "3500", "Dapr sidecar HTTP API port"},
     {"DAPR_GRPC_PORT", "50001", "Dapr sidecar gRPC API port"},
+
+    // --- Dapr app IDs (for service invocation) ---
+    // Local dev: use bare app IDs ("<callee>").
+    // K8s deployment: override to fully-qualified IDs ("<callee>.<namespace>")
+    // when caller and callee live in different namespaces.
+    {"<CALLEE>_APP_ID", "<callee>", "Dapr app ID of the <callee> service"},
 }
 
 func init() {
@@ -59,6 +65,10 @@ func Env(key, fallback string) string {
 var (
     DaprHTTPPort = Env("DAPR_HTTP_PORT", "3500")
     DaprGRPCPort = Env("DAPR_GRPC_PORT", "50001")
+
+    // Dapr app IDs — use fully-qualified "<id>.<namespace>" in K8s cross-namespace setups.
+    // CalleeAppID = Env("<CALLEE>_APP_ID", "<callee>")
+
     // Add project-specific vars here, each matching an entry in `defaults`.
 )
 
@@ -280,6 +290,9 @@ spec:
             # Mirror every pkg/config key here — this is the K8s source of truth
             - { name: APP_PORT, value: ":<app-port>" }
             - { name: GRPC_ADDR, value: "0.0.0.0:<grpc-port>" }
+            # Fully-qualified app ID for cross-namespace service invocation
+            # (local dev uses bare "<callee>"; K8s uses "<callee>.<callee-namespace>")
+            - { name: "<CALLEE>_APP_ID", value: "<callee>.<project>-<callee>" }
           resources:
             requests: { cpu: 100m, memory: 64Mi }
             limits: { cpu: 500m, memory: 256Mi }
@@ -331,6 +344,49 @@ accessControl:
         - name: /<target>/*
           action: allow
 ```
+
+**Cross-namespace service invocation — CRITICAL gotcha:**
+
+Dapr's default name resolver in K8s is **namespace-scoped**. When an app invokes another with just a bare app ID:
+
+```go
+ctx = dapr.InvokingContext(ctx, "callee")  // bare app ID
+resp, err := client.SomeMethod(ctx, req)
+```
+
+Dapr resolves the callee's sidecar by appending the **caller's** namespace:
+```
+callee-dapr.<caller-namespace>.svc.cluster.local  // WRONG namespace!
+```
+
+If caller and callee are in different namespaces, DNS lookup fails with:
+```
+ERR_DIRECT_INVOKE: failed to resolve address for 'callee-dapr.<caller-ns>.svc.cluster.local':
+no such host
+```
+
+The error is often hidden behind Dapr's resiliency retry logic and circuit breaker — you'll see `DROP status returned from app` in the caller sidecar logs, with the actual DNS error only visible at `log-level: debug`.
+
+**Fix:** Use fully-qualified app IDs (`<app-id>.<namespace>`) for cross-namespace invocation:
+
+```go
+// In pkg/config/config.go — configurable per environment
+var CalleeAppID = Env("CALLEE_APP_ID", "callee")  // local dev default
+
+// In callee repository code
+ctx = dapr.InvokingContext(ctx, config.CalleeAppID)
+```
+
+```yaml
+# In caller's K8s deployment — override for cross-namespace
+env:
+  - name: CALLEE_APP_ID
+    value: "callee.<callee-namespace>"
+```
+
+Local dev (single process + single Dapr) keeps using `callee`. K8s deployment with services in separate namespaces uses `callee.<callee-namespace>`. Same binary, different config.
+
+**How to debug:** Enable `dapr.io/log-level: "debug"` annotation on the caller pod, publish a test event, grep sidecar logs for `ERR_DIRECT_INVOKE` or `failed to resolve`.
 
 **K8s Secret structure for Dapr secretstore:** Dapr returns `secret.Data` as the Secret's `data` map directly. Each field must be a top-level key, not nested JSON:
 ```yaml
@@ -719,10 +775,18 @@ e2e:
       run: |
         echo "=== Pod status ==="
         kubectl get pods -A
-        echo "=== <service-a> logs ==="
-        kubectl logs -n <project>-<service-a> -l app=<service-a> --all-containers --tail=50 || true
-        echo "=== <service-b> logs ==="
-        kubectl logs -n <project>-<service-b> -l app=<service-b> --all-containers --tail=50 || true
+        echo "=== <service-a> app logs ==="
+        kubectl logs -n <project>-<service-a> -l app=<service-a> -c <service-a> --tail=100 || true
+        echo "=== <service-a> sidecar logs (filtered for errors) ==="
+        kubectl logs -n <project>-<service-a> -l app=<service-a> -c daprd --tail=200 \
+          | grep -iE 'level.*(error|warn)|ERR_DIRECT|failed to resolve|DROP status' \
+          | grep -v Scheduler | tail -30 || true
+        echo "=== <service-b> app logs ==="
+        kubectl logs -n <project>-<service-b> -l app=<service-b> -c <service-b> --tail=100 || true
+        echo "=== <service-b> sidecar logs (filtered for errors) ==="
+        kubectl logs -n <project>-<service-b> -l app=<service-b> -c daprd --tail=200 \
+          | grep -iE 'level.*(error|warn)|ERR_DIRECT|failed to resolve|DROP status' \
+          | grep -v Scheduler | tail -30 || true
 ```
 
 ### CI hierarchy
@@ -739,6 +803,47 @@ e2e (depends on build + test)     — KinD, MetalLB, Dapr, deploy, test
 
 ---
 
+## Debugging Workflow
+
+**Debug E2E failures standalone first, then verify in CI.** `act` adds a slow feedback loop (~7min per iteration) and obscures logs behind its own output framing. Prefer:
+
+1. `make kind-up` → create cluster once locally
+2. `make k8s-deploy` → deploy (fast iteration on image + manifest changes)
+3. `bash ./tests/e2e.sh` → run tests directly
+4. `kubectl logs -n <ns> -l app=<svc> -c <container>` → trace specific hops
+5. Enable `dapr.io/log-level: "debug"` annotation temporarily for sidecar errors
+6. Once green standalone, `make kind-down && make ci-run` to verify in act
+
+**Isolate the failing hop.** Dapr's resiliency (retries + circuit breakers) masks root causes. To bypass the resiliency layer during debugging, invoke the target directly from inside the caller pod:
+
+```bash
+# Shell into caller pod
+kubectl exec -n <caller-ns> deploy/<caller> -c <caller> -- sh
+# Publish a single event via local sidecar
+wget -qO- --header "dapr-app-id: <callee>.<callee-ns>" --post-data="{...}" \
+  http://localhost:3500/v1.0/invoke/<callee>.<callee-ns>/method/<Method>
+```
+
+**Trace pattern for service invocation failures:**
+
+```bash
+# 1. Did the caller app initiate the call?
+kubectl logs -n <caller-ns> -l app=<caller> -c <caller> | grep Invoking
+
+# 2. Did the caller sidecar attempt resolution?
+kubectl logs -n <caller-ns> -l app=<caller> -c daprd | grep -E 'Endpoint Policy|invoke'
+
+# 3. Did the callee sidecar receive the request?
+kubectl logs -n <callee-ns> -l app=<callee> -c daprd | grep -E 'method|invoke'
+
+# 4. Did the callee app receive the method call?
+kubectl logs -n <callee-ns> -l app=<callee> -c <callee>
+```
+
+If step 2 shows `ERR_DIRECT_INVOKE: failed to resolve address` → cross-namespace app ID issue (see gotcha above). If step 3 has no entries → request didn't reach callee → resolver or access control. If step 4 has no entries but step 3 does → callee app not listening or wrong port.
+
+---
+
 ## Lessons Learned (gotchas that cost debugging time)
 
 | Symptom | Cause | Fix |
@@ -750,6 +855,8 @@ e2e (depends on build + test)     — KinD, MetalLB, Dapr, deploy, test
 | `missing trustdomain for apps` | Access control policy needs per-policy trustDomain | Add `trustDomain: cluster.local` to each policy |
 | `secrets "postgres" not found` | K8s Secret name must match `secretName` arg | Rename Secret to match app's `GetSecret(..., "postgres", ...)` |
 | Wrong values unmarshaled from Dapr secret | Dapr returns Secret `data` map directly, not nested JSON | Flatten stringData fields to match struct fields |
+| `DROP status returned from app` during service invocation | Cross-namespace call with bare app ID; DNS fails for `callee-dapr.<caller-ns>` | Use fully-qualified app ID `callee.<callee-ns>` (see Cross-namespace section) |
+| `ERR_DIRECT_INVOKE: failed to resolve address` hidden by resiliency retries | Circuit breaker opens before root cause surfaces | Set `dapr.io/log-level: "debug"` temporarily and grep for `failed to resolve` |
 | E2E exits after first PASS with set -e | `((PASS++))` returns 0 when PASS=0 → triggers set -e | Use `PASS=$((PASS+1))` |
 | curl hangs for minutes on unreachable LoadBalancer IP | No default timeout | Always use `curl --max-time N` |
 | LoadBalancer IP `0.0.255.200` in act/CI | Docker network subnet detection unreliable in act | Use `kubectl port-forward` in E2E — more portable |

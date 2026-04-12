@@ -17,9 +17,8 @@ import (
 	pb "github.com/AndriyKalashnykov/dapr-go-hero/proto/products"
 )
 
-const daprAppID = "products"
-
 var (
+	daprAppID   = config.ProductsAppID
 	GRPCADDRESS = fmt.Sprintf("127.0.0.1:%s", config.DaprGRPCPort)
 )
 

@@ -27,3 +27,5 @@ vendor
 dist/
 main
 cmd/products/products.claude/
+cmd/*/products
+cmd/*/main

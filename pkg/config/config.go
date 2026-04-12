@@ -27,6 +27,9 @@ var defaults = []entry{
 	// Dapr sidecar (set automatically by dapr run / K8s sidecar injector)
 	{"DAPR_HTTP_PORT", "3500", "Dapr sidecar HTTP API port"},
 	{"DAPR_GRPC_PORT", "50001", "Dapr sidecar gRPC API port"},
+
+	// Dapr app IDs — use "<id>.<namespace>" for cross-namespace K8s invocation
+	{"PRODUCTS_APP_ID", "products", "Dapr app ID of the products service"},
 }
 
 type entry struct {
@@ -66,6 +69,12 @@ var (
 var (
 	DaprHTTPPort = env("DAPR_HTTP_PORT", "3500")
 	DaprGRPCPort = env("DAPR_GRPC_PORT", "50001")
+)
+
+// Dapr app IDs for service invocation. In K8s with services in separate
+// namespaces, use fully-qualified IDs ("<app-id>.<namespace>").
+var (
+	ProductsAppID = env("PRODUCTS_APP_ID", "products")
 )
 
 // Defaults returns all config entries for external tooling (e.g., .env generation).

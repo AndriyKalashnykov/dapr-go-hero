@@ -18,27 +18,91 @@ Dapr, at its core, is a set of building block APIs that abstract away common tas
 
 ## Quick Start
 
+Two modes are supported: **local dev** (standalone binaries + `dapr run`) and **Kubernetes** (KinD + MetalLB + Dapr + all services in containers).
+
+### Option A — Kubernetes (recommended, full stack)
+
+One command spins up a local KinD cluster with MetalLB, installs Dapr + Dashboard, builds images, and deploys everything:
+
 ```bash
-make deps               # install tool dependencies (gosec, golangci-lint)
+make e2e-setup          # kind-up + k8s-deploy (creates cluster, deploys stack)
+make e2e                # run end-to-end tests (7 assertions)
+make k8s-status         # show pod/service status across all namespaces
+```
+
+Once deployed, access UIs and APIs via port-forward:
+
+| Service | URL | Command |
+|---------|-----|---------|
+| Inventory REST API | http://localhost:3000 | `kubectl port-forward svc/inventory 3000:3000 -n dapr-go-hero-inventory` |
+| Dapr Dashboard | http://localhost:8080 | `kubectl port-forward svc/dapr-dashboard 8080:8080 -n dapr-system` |
+| Zipkin tracing UI | http://localhost:9411 | `kubectl port-forward svc/zipkin 9411:9411 -n dapr-go-hero` |
+| Redis | localhost:6379 | `kubectl port-forward svc/redis 6379:6379 -n dapr-go-hero` |
+| PostgreSQL | localhost:5432 | `kubectl port-forward svc/postgres 5432:5432 -n dapr-go-hero` |
+
+Query the REST API through the inventory port-forward:
+
+```bash
+curl http://localhost:3000/v1/widgets/widget | jq
+curl http://localhost:3000/v1/gadgets/gadget | jq
+curl http://localhost:3000/v1/products/thingamajig | jq
+```
+
+Tear down when done:
+
+```bash
+make e2e-teardown       # k8s-undeploy + kind-down
+```
+
+### Option B — Local dev (standalone binaries)
+
+Requires `dapr init`, PostgreSQL container, and the `widgets` table from `tables.sql`. Each service runs as its own `go run`-ed process with a Dapr sidecar.
+
+```bash
+make deps               # install tool dependencies (mise, gosec, golangci-lint)
 make build              # compile inventory and products binaries
 make test               # run tests
 make run-products       # start Products gRPC service (terminal 1)
 make run                # start Inventory service with Dapr (terminal 2)
+make send-all           # publish three test events (terminal 3)
+make get-all            # query all three REST endpoints
 ```
 
-> **Note:** Running the services requires `dapr init`, a PostgreSQL container, and the `widgets` table from `tables.sql`. See [Running the demo](#running-the-demo) for full setup instructions.
+See [Running the demo locally](#running-the-demo-locally) for the full PostgreSQL setup.
 
 ## Prerequisites
 
+**Core (both modes):**
+
 | Tool | Version | Purpose |
 |------|---------|---------|
-| [Go](https://go.dev/dl/) | 1.26.1+ | Language runtime and compiler |
+| [Go](https://go.dev/dl/) | 1.26.2+ | Language runtime and compiler (auto-installed via [mise](https://mise.jdx.dev)) |
 | [GNU Make](https://www.gnu.org/software/make/) | 3.81+ | Build orchestration |
-| [Dapr CLI](https://docs.dapr.io/getting-started/install-dapr-cli/) | latest | Microservices runtime (`dapr init` provides Redis) |
-| [Docker](https://www.docker.com/) | latest | PostgreSQL and Redis containers |
+| [Docker](https://www.docker.com/) | latest w/ BuildKit | Container builds and local runtimes |
 | [jq](https://jqlang.github.io/jq/) | latest | Pretty-printing JSON responses |
-| [protoc](https://grpc.io/docs/protoc-installation/) | latest | Regenerating protobuf code (optional) |
-| [act](https://github.com/nektos/act) | latest | Running GitHub Actions locally (optional) |
+
+**Kubernetes mode (Option A):**
+
+| Tool | Version | Purpose |
+|------|---------|---------|
+| [KinD](https://kind.sigs.k8s.io/) | 0.31.0+ | Local Kubernetes in Docker |
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | latest | K8s CLI (bundled with KinD) |
+| [Dapr CLI](https://docs.dapr.io/getting-started/install-dapr-cli/) | 1.17.0+ | `dapr init -k` installs runtime into KinD |
+
+**Local dev mode (Option B):**
+
+| Tool | Version | Purpose |
+|------|---------|---------|
+| [Dapr CLI](https://docs.dapr.io/getting-started/install-dapr-cli/) | 1.17.0+ | Provides Redis via `dapr init` |
+| PostgreSQL | 16+ | Run as Docker container (see [Running the demo locally](#running-the-demo-locally)) |
+
+**Optional:**
+
+| Tool | Version | Purpose |
+|------|---------|---------|
+| [protoc](https://grpc.io/docs/protoc-installation/) | latest | Regenerating protobuf code |
+| [act](https://github.com/nektos/act) | latest | Running GitHub Actions locally |
+| [hadolint](https://github.com/hadolint/hadolint) | 2.12+ | Dockerfile linting (auto-installed by `make docker-lint`) |
 
 Install all required tool dependencies:
 
@@ -103,6 +167,27 @@ Run `make help` to see all available targets.
 | `make get-thingamajig` | Fetch product from REST API |
 | `make get-all` | Fetch all three items from REST API |
 
+### Docker
+
+| Target | Description |
+|--------|-------------|
+| `make docker-build` | Build inventory and products container images (BuildKit + Alpine) |
+| `make docker-push` | Push images to `$(REGISTRY)` (default: `dapr-go-hero`) |
+| `make docker-lint` | Lint Dockerfiles with hadolint |
+
+### Kubernetes (KinD + MetalLB + Dapr)
+
+| Target | Description |
+|--------|-------------|
+| `make kind-up` | Create KinD cluster + install MetalLB + install Dapr + Dashboard |
+| `make kind-down` | Destroy KinD cluster |
+| `make k8s-deploy` | Build images, load into KinD, apply all manifests |
+| `make k8s-undeploy` | Remove all K8s manifests |
+| `make k8s-status` | Show pod/service status across all namespaces |
+| `make e2e` | Run end-to-end tests against running K8s cluster |
+| `make e2e-setup` | Full setup: `kind-up` + `k8s-deploy` |
+| `make e2e-teardown` | Full teardown: `k8s-undeploy` + `kind-down` |
+
 ### Utilities
 
 | Target | Description |
@@ -110,9 +195,10 @@ Run `make help` to see all available targets.
 | `make help` | List available tasks |
 | `make deps` | Install required tool dependencies (idempotent) |
 | `make deps-act` | Install act for running GitHub Actions locally |
-| `make deps-check` | Show required Go versions and gvm status |
+| `make deps-check` | Show Go version and mise tool status |
 | `make deps-prune` | Remove unused and redundant dependencies |
 | `make deps-prune-check` | Verify no prunable dependencies (CI gate) |
+| `make generate-env` | Regenerate `.env` from `pkg/config` defaults |
 | `make renovate-bootstrap` | Install nvm and npm for Renovate |
 | `make release` | Create and push a new tag |
 | `make renovate-validate` | Validate Renovate configuration |
@@ -149,7 +235,144 @@ Finally, general products are stored in the Products gRPC service. The developer
 
 All component configurations are located in the `components` directory. The main Dapr configuration is in `config.yaml` and is where tracing and preview features are enabled.
 
-## Running the demo
+## Kubernetes Architecture
+
+The project ships with production-like Kubernetes manifests in `k8s/`, demonstrating Dapr's full feature set in a real cluster.
+
+### Cluster Topology
+
+```mermaid
+graph TB
+  subgraph Client["External (host)"]
+    C[curl / browser]
+  end
+
+  subgraph Cluster["KinD cluster"]
+    subgraph MetalLB["metallb-system"]
+      ML[MetalLB L2]
+    end
+
+    subgraph DaprSystem["dapr-system"]
+      DS[Dapr control plane<br/>Operator · Sentry · Placement<br/>Scheduler · Sidecar Injector]
+      DD[Dapr Dashboard]
+    end
+
+    subgraph Infra["dapr-go-hero (infrastructure)"]
+      R[(Redis<br/>6379)]
+      P[(PostgreSQL<br/>5432)]
+      Z[Zipkin<br/>9411]
+    end
+
+    subgraph InvNS["dapr-go-hero-inventory"]
+      ISVC{{Service LB :3000}}
+      IPOD[inventory pod<br/>app + daprd sidecar]
+      ISEC[[Secret: postgres]]
+      ISA((ServiceAccount<br/>+ secret-reader Role))
+      ICRD[Dapr CRDs:<br/>pubsub, statestore,<br/>secretstore, subscription,<br/>resiliency, configuration]
+    end
+
+    subgraph ProdNS["dapr-go-hero-products"]
+      PSVC{{Service :50151}}
+      PPOD[products pod<br/>app + daprd sidecar]
+      PSA((ServiceAccount))
+      PCRD[Dapr CRD:<br/>configuration]
+    end
+
+    ML -.assigns LB IP.-> ISVC
+    C -->|HTTP :3000| ISVC --> IPOD
+
+    IPOD -->|pub/sub| R
+    IPOD -->|state| R
+    IPOD -->|SQL| P
+    IPOD -->|GetSecret kubernetes| ISEC
+    IPOD -.->|traces| Z
+    PPOD -.->|traces| Z
+
+    IPOD ==>|"gRPC via Dapr<br/>(fully-qualified app ID)"| PPOD
+
+    DS -.manages.-> IPOD
+    DS -.manages.-> PPOD
+    ISA -.grants.-> IPOD
+    PSA -.grants.-> PPOD
+    ICRD -.configures.-> IPOD
+    PCRD -.configures.-> PPOD
+  end
+```
+
+### Event Flow (CloudEvent → 3 routes)
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor Pub as Publisher<br/>(curl / make send-*)
+  participant IDaprd as inventory daprd
+  participant Redis as Redis pub/sub
+  participant IApp as inventory app
+  participant PG as PostgreSQL
+  participant RState as Redis state
+  participant PDaprd as products daprd
+  participant PApp as products app
+
+  Pub->>IDaprd: POST /v1.0/publish/pubsub/inventory<br/>CloudEvent (type=widget.v1)
+  IDaprd->>Redis: XADD inventory
+  Redis-->>IDaprd: deliver to subscribers
+  IDaprd->>IApp: route by event.type
+
+  alt widget.v1 → /widgets.v1
+    IApp->>PG: INSERT widget (via Secret Store creds)
+  else gadget.v1 → /gadgets.v1
+    IApp->>RState: SET gadget:id
+  else default → /products.v1 (thingamajig)
+    IApp->>IDaprd: gRPC SaveProduct<br/>header dapr-app-id: products.dapr-go-hero-products
+    IDaprd->>PDaprd: invoke (cross-namespace name resolution)
+    PDaprd->>PApp: SaveProduct RPC
+    PApp-->>PDaprd: empty response
+  end
+
+  Note over IDaprd,PDaprd: All hops traced → Zipkin
+```
+
+### Namespace Layout (isolated by service)
+
+| Namespace | Contents | RBAC |
+|-----------|----------|------|
+| `dapr-go-hero` | Shared infrastructure: Redis, PostgreSQL, Zipkin | — |
+| `dapr-go-hero-inventory` | Inventory deployment + Dapr components | ServiceAccount with `secret-reader` Role (for `secretstores.kubernetes`) |
+| `dapr-go-hero-products` | Products gRPC service + Dapr configuration | ServiceAccount with minimal permissions |
+
+### Dapr Features in K8s (k8s/dapr/)
+
+| File | Kind | What it demonstrates |
+|------|------|----------------------|
+| `pubsub.yaml` | Component | Redis pub/sub with FQDN addressing |
+| `statestore.yaml` | Component | Redis state store, scoped to `inventory` app |
+| `secretstore.yaml` | Component | K8s-native secret store (reads from the namespace's Secrets) |
+| `subscription.yaml` | Subscription (v2alpha1) | Declarative routing: `widget.v1` → `/widgets.v1`, `gadget.v1` → `/gadgets.v1`, default → `/products.v1` |
+| `resiliency.yaml` | Resiliency | Retry, timeout, circuit breaker policies on state/pubsub and `products` service |
+| `configuration.yaml` | Configuration | Zipkin tracing, mTLS, access control policies (per namespace) |
+
+### Cross-Namespace Service Invocation
+
+When inventory invokes products across namespaces, a **fully-qualified app ID** is required (`products.dapr-go-hero-products`) because Dapr's default resolver is namespace-scoped. This is set via `PRODUCTS_APP_ID` env var in the inventory deployment manifest. See [`docs/containerize-and-deploy.md`](docs/containerize-and-deploy.md) for the full gotcha.
+
+### Configuration as Code
+
+All runtime configuration (ports, addresses, app IDs) lives in `pkg/config/config.go` with a single `defaults` slice as the source of truth. `make generate-env` regenerates `.env` from the same source. K8s deployments set the same keys as `env:` entries in the pod spec.
+
+### Container Images
+
+Multi-stage Alpine Dockerfiles with BuildKit cache mounts (`Dockerfile.inventory`, `Dockerfile.products`). Rebuild in ~0.2s after initial build.
+
+### Local Cluster
+
+`make kind-up` creates a KinD cluster with:
+- **MetalLB** (L2 mode) for LoadBalancer Service support
+- **Dapr runtime** via `dapr init -k` (Sentry, Operator, Placement, Scheduler, Sidecar Injector)
+- **Dapr Dashboard** for cluster inspection
+
+## Running the demo locally
+
+For the Kubernetes-based demo, see [Quick Start → Option A](#option-a--kubernetes-recommended-full-stack). This section covers the standalone-binary local dev flow.
 
 After running `dapr init`, you should have Redis running in a Docker container. You will need to create a PostgreSQL database and update `secrets.json` accordingly. Then create the `widgets` table from `tables.sql`.
 
@@ -219,8 +442,12 @@ GitHub Actions runs on every push to `main`, tags `v*`, pull requests, and `work
 | Job | Depends on | Steps |
 |-----|-----------|-------|
 | **static-check** | — | Lint, Security, Tidy check |
-| **build** | static-check | Build |
-| **test** | static-check | Test |
+| **docker-lint** | — | Hadolint on Dockerfiles (parallel with static-check) |
+| **build** | static-check | Build Go binaries |
+| **test** | static-check | Unit + integration tests |
+| **e2e** | build, test | KinD + MetalLB + Dapr, deploy, run `tests/e2e.sh` |
+
+The `e2e` job provisions a full KinD cluster on every PR, loads images, deploys all manifests, and runs 7 end-to-end assertions against the real Dapr stack.
 
 [Renovate](https://docs.renovatebot.com/) keeps dependencies up to date with platform automerge enabled.
 
