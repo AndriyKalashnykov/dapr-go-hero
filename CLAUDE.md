@@ -193,9 +193,13 @@ Items surfaced by `/upgrade-analysis` that are not immediately actionable. Revie
 
 - [ ] Pin `ubuntu-latest` to `ubuntu-24.04` in CI workflows for fully reproducible builds — currently resolves correctly but will shift when GitHub promotes 26.04
 - [ ] Add `DAPR_CLI_VERSION` to Makefile if `dapr-init` or `dapr-run` targets are ever added (latest stable: v1.17.1)
-- [ ] Track `pgx/v5` CVEs (GO-2026-4772, GO-2026-4771) — no fix available yet, code not reachable per govulncheck. Upgrade when patched version is released
+- [ ] Track `pgx/v5` CVEs GO-2026-4772 / GO-2026-4771 — **Fixed in: N/A upstream** (verified 2026-04-12). Code not reachable per govulncheck. Upgrade when patched version is released
 - [ ] Cross-project: align `golangci-lint` version in `go-todo-web` (v2.1.6) and `k8s-mcp-example` (v2.11.1) to current 2.11.4
 - [ ] Update CI workflow to use `jdx/mise-action` instead of `actions/setup-go` (deferred — separate `/ci-workflow` task)
+- [ ] Monitor `dapr/setup-dapr@v2` — runs on Node.js 20; GitHub forces Node 24 starting 2026-06-02. Upstream tag `v2` is still July 2024; awaiting Node.js 24 compatible release before Renovate can bump SHA
+- [ ] Monitor `joho/godotenv` — no release since Feb 2023 (still v1.5.1 as of 2026-04-12). If fully abandoned, swap to a ~30-line env parser
+- [ ] Monitor Dapr Dashboard v0.15.0 (Sept 2024, upstream dormant) — still functional, but flag if security concerns arise
+- [ ] OTel migration: replace Zipkin-direct tracing once Dapr deprecates the Zipkin exporter (no EOL announced yet)
 
 *Last reviewed: 2026-04-12*
 

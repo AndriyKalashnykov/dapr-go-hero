@@ -22,11 +22,11 @@ MISE_VERSION          := 2026.4.10
 # renovate: datasource=github-releases depName=kubernetes-sigs/kind
 KIND_VERSION          := 0.31.0
 # Manual: bumped together with KIND_VERSION (see KinD release notes for matching node image)
-KIND_NODE_IMAGE       := v1.35.0
+KIND_NODE_IMAGE       := v1.35.3
 # renovate: datasource=github-releases depName=metallb/metallb
 METALLB_VERSION       := 0.15.3
 # renovate: datasource=github-releases depName=hadolint/hadolint
-HADOLINT_VERSION      := 2.12.0
+HADOLINT_VERSION      := 2.14.0
 # renovate: datasource=docker depName=minlag/mermaid-cli
 MERMAID_CLI_VERSION   := 11.12.0
 
@@ -42,11 +42,10 @@ NS_PRODUCTS    := dapr-go-hero-products
 GO_VERSION := $(shell grep -oP '^go \K[0-9.]+' go.mod)
 
 # Helper: run a command under the correct Go version.
-# mise (preferred) auto-activates via shell hook; actions/setup-go handles CI.
-# Legacy gvm fallback: only if gvm is activated ($GVM_ROOT set), not CI, and script exists.
-HAS_GVM := $(shell [ -z "$$CI" ] && [ -n "$$GVM_ROOT" ] && [ -s "$$GVM_ROOT/scripts/gvm" ] && echo true || echo false)
+# mise auto-activates via shell hook; actions/setup-go handles CI.
+# PATH already has the right `go` binary in both cases — no wrapping needed.
 define go-exec
-$(if $(filter true,$(HAS_GVM)),bash -c '. $$GVM_ROOT/scripts/gvm && gvm use go$(GO_VERSION) >/dev/null && $(1)',bash -c '$(1)')
+bash -c '$(1)'
 endef
 
 #help: @ List available tasks
