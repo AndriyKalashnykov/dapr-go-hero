@@ -253,6 +253,7 @@ Service Invocation to the Products service uses a generated gRPC client pointed 
 ### Cluster Topology
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif, system-ui, sans-serif','primaryColor':'#0D8482','primaryTextColor':'#fff','primaryBorderColor':'#064E3B','lineColor':'#4B6584','clusterBkg':'#F5F7FA','clusterBorder':'#4B6584'}}}%%
 graph TB
   subgraph Client["External (host)"]
     C[curl / browser]
@@ -308,11 +309,26 @@ graph TB
     ICRD -.configures.-> IPOD
     PCRD -.configures.-> PPOD
   end
+
+  classDef external fill:#F59E0B,stroke:#92400E,color:#fff,stroke-width:1px
+  classDef metallb fill:#6B7280,stroke:#374151,color:#fff,stroke-width:1px
+  classDef daprControl fill:#0D8482,stroke:#064E3B,color:#fff,stroke-width:1px
+  classDef infra fill:#4B6584,stroke:#2C3E50,color:#fff,stroke-width:1px
+  classDef appPod fill:#0A7E7C,stroke:#064E3B,color:#fff,stroke-width:1px
+  classDef k8sResource fill:#94D2BD,stroke:#0D8482,color:#064E3B,stroke-width:1px
+
+  class C external
+  class ML metallb
+  class DS,DD daprControl
+  class R,P,Z infra
+  class ISVC,IPOD,PSVC,PPOD appPod
+  class ISEC,ISA,ICRD,PSA,PCRD k8sResource
 ```
 
 ### Event Flow (CloudEvent → 3 routes)
 
 ```mermaid
+%%{init: {'theme':'base','themeVariables':{'fontFamily':'ui-sans-serif, system-ui, sans-serif','primaryColor':'#0D8482','primaryTextColor':'#fff','primaryBorderColor':'#064E3B','actorBkg':'#F59E0B','actorBorder':'#92400E','actorTextColor':'#fff','actorLineColor':'#4B6584','signalColor':'#4B6584','signalTextColor':'#1F2937','labelBoxBkgColor':'#E6F4F3','labelBoxBorderColor':'#0D8482','labelTextColor':'#064E3B','loopTextColor':'#064E3B','noteBkgColor':'#FEF3C7','noteBorderColor':'#92400E','noteTextColor':'#1F2937','altBackground':'#F5F7FA'}}}%%
 sequenceDiagram
   autonumber
   actor Pub as Publisher<br/>(curl / make send-*)
