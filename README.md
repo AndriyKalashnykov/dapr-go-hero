@@ -256,7 +256,7 @@ Service Invocation to the Products service uses a generated gRPC client pointed 
 ### Cluster Topology
 
 ```mermaid
-%%{init: {'theme':'base','themeVariables':{'background':'#FFFFFF','fontFamily':'ui-sans-serif, system-ui, sans-serif','primaryColor':'#FFFFFF','primaryTextColor':'#000000','primaryBorderColor':'#000000','secondaryColor':'#FFFFFF','tertiaryColor':'#FFFFFF','lineColor':'#000000','edgeLabelBackground':'#FFFFFF','clusterBkg':'#FFFFFF','clusterBorder':'#000000','titleColor':'#000000'}}}%%
+%%{init: {'theme':'base','themeVariables':{'background':'#FFFFFF','fontFamily':'ui-sans-serif, system-ui, sans-serif','primaryColor':'#FFFFFF','primaryTextColor':'#000000','primaryBorderColor':'#000000','secondaryColor':'#FFFFFF','tertiaryColor':'#FFFFFF','lineColor':'#0070E5','edgeLabelBackground':'#FFFFFF','clusterBkg':'#FFFFFF','clusterBorder':'#0070E5','titleColor':'#0070E5'}}}%%
 graph TB
   subgraph Client["External (host)"]
     C[curl / browser]
@@ -313,9 +313,9 @@ graph TB
     PCRD -.configures.-> PPOD
   end
 
-  classDef plain fill:#FFFFFF,stroke:#000000,color:#000000,stroke-width:1px
-  classDef dapr fill:#0070E5,stroke:#000000,color:#FFFFFF,stroke-width:1px
-  classDef emphasis fill:#000000,stroke:#000000,color:#FFFFFF,stroke-width:1px
+  classDef plain fill:#FFFFFF,stroke:#0070E5,color:#000000,stroke-width:1px
+  classDef dapr fill:#0070E5,stroke:#0070E5,color:#FFFFFF,stroke-width:1px
+  classDef emphasis fill:#000000,stroke:#0070E5,color:#FFFFFF,stroke-width:1px
 
   class C,ML,R,P,Z,ISEC,ISA,ICRD,PSA,PCRD,ISVC,PSVC plain
   class DS,DD dapr
@@ -325,7 +325,7 @@ graph TB
 ### Event Flow (CloudEvent → 3 routes)
 
 ```mermaid
-%%{init: {'theme':'base','themeVariables':{'background':'#FFFFFF','fontFamily':'ui-sans-serif, system-ui, sans-serif','primaryColor':'#FFFFFF','primaryTextColor':'#000000','primaryBorderColor':'#000000','actorBkg':'#FFFFFF','actorBorder':'#000000','actorTextColor':'#000000','actorLineColor':'#000000','signalColor':'#000000','signalTextColor':'#000000','labelBoxBkgColor':'#0070E5','labelBoxBorderColor':'#000000','labelTextColor':'#FFFFFF','loopTextColor':'#000000','noteBkgColor':'#FFFFFF','noteBorderColor':'#000000','noteTextColor':'#000000','altBackground':'#FFFFFF','activationBkgColor':'#0070E5','activationBorderColor':'#000000','sequenceNumberColor':'#FFFFFF'}}}%%
+%%{init: {'theme':'base','themeVariables':{'background':'#FFFFFF','fontFamily':'ui-sans-serif, system-ui, sans-serif','primaryColor':'#FFFFFF','primaryTextColor':'#000000','primaryBorderColor':'#0070E5','actorBkg':'#FFFFFF','actorBorder':'#0070E5','actorTextColor':'#000000','actorLineColor':'#0070E5','signalColor':'#0070E5','signalTextColor':'#0070E5','labelBoxBkgColor':'#0070E5','labelBoxBorderColor':'#0070E5','labelTextColor':'#FFFFFF','loopTextColor':'#0070E5','noteBkgColor':'#FFFFFF','noteBorderColor':'#0070E5','noteTextColor':'#000000','altBackground':'#FFFFFF','activationBkgColor':'#0070E5','activationBorderColor':'#0070E5','sequenceNumberColor':'#FFFFFF'}}}%%
 sequenceDiagram
   autonumber
   actor Pub as Publisher<br/>(curl / make send-*)
