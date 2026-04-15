@@ -139,7 +139,10 @@ jobs:
       - name: Install Dapr
         uses: dapr/setup-dapr@8d980918fd43a2765c143ce7f687665b2d46a6b9 # v2
         with:
-          version: '1.17.4'
+          # Dapr CLI version (not runtime). CLI v1.17.1 is the latest dapr/cli release.
+          # Runtime (sidecar) version is pinned separately in Makefile as DAPR_RUNTIME_VERSION
+          # and passed to `dapr init -k --runtime-version`.
+          version: '1.17.1'
 
       - name: Initialize Dapr on cluster
         run: dapr init -k --wait --timeout 300
