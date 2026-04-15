@@ -12,17 +12,20 @@ GOSEC_VERSION         := 2.25.0
 GOLANGCI_LINT_VERSION := 2.11.4
 # renovate: datasource=github-releases depName=nektos/act
 ACT_VERSION           := 0.2.87
-# renovate: datasource=github-releases depName=nvm-sh/nvm
-NVM_VERSION           := 0.40.4
-NODE_VERSION          := 24
 # renovate: datasource=github-releases depName=jdx/mise
-MISE_VERSION          := 2026.4.10
+MISE_VERSION          := 2026.4.14
+
+# === Dapr Versions (pinned) ===
+# renovate: datasource=github-releases depName=dapr/dapr
+DAPR_RUNTIME_VERSION  := 1.17.4
+
+# Codegen tool versions (protoc, protoc-gen-go, protoc-gen-go-grpc) are pinned in .mise.toml
 
 # === K8s / Docker Versions (pinned) ===
 # renovate: datasource=github-releases depName=kubernetes-sigs/kind
 KIND_VERSION          := 0.31.0
 # Manual: bumped together with KIND_VERSION (see KinD release notes for matching node image)
-KIND_NODE_IMAGE       := v1.35.1
+KIND_NODE_IMAGE       := v1.35.4
 # renovate: datasource=github-releases depName=metallb/metallb
 METALLB_VERSION       := 0.15.3
 # renovate: datasource=github-releases depName=hadolint/hadolint
@@ -259,15 +262,13 @@ get-all: get-widget get-gadget get-thingamajig
 
 # === Renovate ===
 
-#renovate-bootstrap: @ Install nvm and npm for Renovate
+#renovate-bootstrap: @ Install Node via mise (version pinned in .mise.toml) for Renovate
 renovate-bootstrap:
-	@command -v node >/dev/null 2>&1 || { \
-		echo "Installing nvm $(NVM_VERSION) + Node $(NODE_VERSION)..."; \
-		curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v$(NVM_VERSION)/install.sh | bash; \
-		export NVM_DIR="$$HOME/.nvm"; \
-		[ -s "$$NVM_DIR/nvm.sh" ] && . "$$NVM_DIR/nvm.sh"; \
-		nvm install $(NODE_VERSION); \
+	@command -v mise >/dev/null 2>&1 || { \
+		echo "Error: mise is required. Run 'make deps' to install it."; exit 1; \
 	}
+	@mise install node --yes
+	@command -v pnpm >/dev/null 2>&1 || corepack enable pnpm 2>/dev/null || true
 
 #renovate-validate: @ Validate Renovate configuration
 renovate-validate: renovate-bootstrap
@@ -276,6 +277,16 @@ renovate-validate: renovate-bootstrap
 #generate-env: @ Regenerate .env from pkg/config defaults
 generate-env:
 	@$(call go-exec,go run ./cmd/generate-env)
+
+#proto-gen: @ Regenerate gRPC code from .proto files (uses mise-pinned tool versions)
+proto-gen: deps
+	@command -v mise >/dev/null 2>&1 || { echo "Error: mise required. See https://mise.jdx.dev"; exit 1; }
+	@PROTOC_INC="$$(dirname $$(dirname $$(mise which protoc)))/include"; \
+		mise exec -- protoc -I"$$PROTOC_INC" -I. \
+			--go_out=. --go-grpc_out=. \
+			--go_opt=paths=source_relative --go-grpc_opt=paths=source_relative \
+			proto/products/products.proto
+	@echo "Protobuf code regenerated."
 
 # === Docker ===
 
@@ -315,7 +326,7 @@ kind-up:
 		sed "s/METALLB_IP_SUB/$$ip_sub/g" k8s/metallb-config.yaml | kubectl apply -f -
 	@echo "=== Installing Dapr ==="
 	@command -v dapr >/dev/null 2>&1 || { echo "Error: dapr CLI not installed. See https://docs.dapr.io/getting-started/install-dapr-cli/"; exit 1; }
-	@dapr init -k --wait --timeout 300 2>/dev/null || true
+	@dapr init -k --runtime-version $(DAPR_RUNTIME_VERSION) --wait --timeout 300 2>/dev/null || true
 	@echo "=== Installing Dapr Dashboard ==="
 	@dapr dashboard -k -p 0 2>/dev/null &
 	@echo "=== KinD cluster ready ==="
@@ -369,9 +380,13 @@ k8s-status:
 
 # === E2E ===
 
-#e2e: @ Run end-to-end tests against running K8s cluster
+#e2e: @ Run end-to-end tests against running K8s cluster (default: sdk-http mode)
 e2e:
 	@./tests/e2e.sh
+
+#e2e-all: @ Run end-to-end tests against all 4 client modes (sdk-http, sdk-grpc, custom-http, custom-grpc)
+e2e-all:
+	@./tests/e2e.sh all
 
 #e2e-setup: @ Full setup: create cluster + deploy everything
 e2e-setup: kind-up k8s-deploy
@@ -385,8 +400,8 @@ e2e-teardown: k8s-undeploy kind-down
 	send-widget send-gadget send-thingamajig send-all \
 	get-widget get-gadget get-thingamajig get-all \
 	renovate-bootstrap renovate-validate \
-	generate-env \
+	generate-env proto-gen \
 	docker-build docker-push docker-lint deps-hadolint \
 	kind-up kind-down k8s-deploy k8s-undeploy k8s-status \
-	e2e e2e-setup e2e-teardown \
+	e2e e2e-all e2e-setup e2e-teardown \
 	mermaid-lint

@@ -16,8 +16,9 @@ make static-check       # Composite quality gate: lint + sec + mermaid-lint + de
 make lint               # Run golangci-lint (includes gocritic) + mermaid-lint
 make sec                # Run gosec security scanner (excludes generated proto/ dir)
 make test               # Run unit tests (go test -race -v ./...)
-make integration-test   # Run integration tests (real PostgreSQL via Testcontainers)
+make integration-test   # Run integration tests (real PostgreSQL + Dapr-state stub + gRPC server)
 make build              # Compile both binaries (depends on deps only)
+make proto-gen          # Regenerate gRPC code from .proto files (mise-pinned protoc)
 make update             # Update all deps to latest (go get -u ./... && go mod tidy)
 make ci                 # Full CI pipeline: deps → static-check → test → integration-test → build
 make ci-run             # Run GitHub Actions workflow locally via act
@@ -32,7 +33,8 @@ make kind-down          # Destroy KinD cluster
 make k8s-deploy         # Build images, load into KinD, deploy all manifests
 make k8s-undeploy       # Remove all K8s manifests
 make k8s-status         # Show pod/service status across all namespaces
-make e2e                # Run end-to-end tests against running K8s cluster
+make e2e                # Run end-to-end tests (default: sdk-http mode)
+make e2e-all            # Run e2e across all 4 client modes (sdk-http, sdk-grpc, custom-http, custom-grpc)
 make e2e-setup          # Full setup: kind-up + k8s-deploy
 make e2e-teardown       # Full teardown: k8s-undeploy + kind-down
 ```
@@ -166,8 +168,12 @@ A separate cleanup workflow (`.github/workflows/cleanup-runs.yml`) removes old w
 
 Regenerate gRPC code after modifying `proto/products/products.proto`:
 ```bash
-protoc --go_out=. --go-grpc_out=. --go_opt=paths=source_relative --go-grpc_opt=paths=source_relative proto/products/products.proto
+make proto-gen
 ```
+
+The `proto-gen` target pins `protoc`, `protoc-gen-go`, and `protoc-gen-go-grpc` to versions set in `.mise.toml` (installed via `mise install`), so regeneration is reproducible. The target calls `mise exec -- protoc` directly so PATH ordering doesn't matter.
+
+The Dapr cluster runtime version is pinned in the Makefile as `DAPR_RUNTIME_VERSION` (`make kind-up` passes it to `dapr init -k --runtime-version $(DAPR_RUNTIME_VERSION)`). Keeps local clusters aligned with CI's pinned sidecar version regardless of the developer's Dapr CLI default.
 
 ## Static Analysis
 
@@ -200,8 +206,10 @@ Items surfaced by `/upgrade-analysis` that are not immediately actionable. Revie
 - [ ] Monitor `joho/godotenv` — no release since Feb 2023 (still v1.5.1 as of 2026-04-12). If fully abandoned, swap to a ~30-line env parser
 - [ ] Monitor Dapr Dashboard v0.15.0 (Sept 2024, upstream dormant) — still functional, but flag if security concerns arise
 - [ ] OTel migration: replace Zipkin-direct tracing once Dapr deprecates the Zipkin exporter (no EOL announced yet)
+- [ ] Redis 8 evaluation — Redis 8 (GA 2025-05) ships under RSALv2/SSPLv1, not BSD. Project stays on Redis 7.4 (BSD) until SSPL policy is confirmed for the deployment target. Valkey 8.x is the BSD-licensed fork and drop-in replacement if migration is ever required
+- [ ] Migrate Fiber v3 → `net/http` + `http.ServeMux` (Go 1.22+ pattern routing). Rationale: Fiber is built on fasthttp which is incompatible with `net/http.Handler`, forcing custom adapters for OTel instrumentation, `httptest`, and standard tracing propagators. The inventory binary already runs three other servers on stdlib (Dapr SDK HTTP + SDK gRPC + raw gRPC), so Fiber is a lone outlier. Scope: `cmd/inventory/main.go` (drop `fiber.Config`, replace `app.Listen` / `dapr.RegisterServices` / `dapr.RegisterEventHandlers` / `dapr.SubscribeHTTPHandler` plumbing with `http.ServeMux`), all `pkg/features/*/service/service.go` handlers (`fiber.Ctx` → `http.ResponseWriter, *http.Request`), `pkg/dapr/server_http.go` and `pkg/dapr/client_http.go` (the Fiber HTTP client in `client_http.go` can move to `net/http` too — `client_http_integration_test.go` already stubs via `net/http/httptest`). Consider `go-chi/chi` as a drop-in if stdlib mux patterns feel thin. Removes one dependency and the fasthttp compatibility tax
 
-*Last reviewed: 2026-04-12*
+*Last reviewed: 2026-04-15*
 
 ## Skills
 

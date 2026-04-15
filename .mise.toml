@@ -1,2 +1,11 @@
 [tools]
+# renovate: datasource=golang-version depName=go
 go = "1.26.2"
+# renovate: datasource=github-releases depName=nodejs/node extractVersion=^v(?<version>\d+)
+node = "24"
+# renovate: datasource=github-releases depName=protocolbuffers/protobuf extractVersion=^v(?<version>.*)$
+protoc = "34.1"
+# renovate: datasource=github-releases depName=protocolbuffers/protobuf-go extractVersion=^v(?<version>.*)$
+protoc-gen-go = "1.36.11"
+# renovate: datasource=github-releases depName=grpc/grpc-go extractVersion=^cmd/protoc-gen-go-grpc/v(?<version>.*)$
+protoc-gen-go-grpc = "1.6.1"

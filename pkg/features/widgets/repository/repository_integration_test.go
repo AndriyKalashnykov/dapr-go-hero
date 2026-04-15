@@ -8,6 +8,8 @@ package repository_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -140,6 +142,49 @@ func TestRepository_Load_ReturnsNotFoundForMissingWidget(t *testing.T) {
 	}
 	if errz.Code != 404 {
 		t.Errorf("Code = %d, want 404", errz.Code)
+	}
+}
+
+// TestRepository_ConcurrentSaveLoad exercises the pgx pool under contention.
+// Each goroutine inserts and reads its own key, so results are deterministic
+// — any data race, connection leak, or AfterConnect regression surfaces here.
+func TestRepository_ConcurrentSaveLoad(t *testing.T) {
+	pool := setupPostgres(t)
+	repo := repository.New(logr.Discard(), pool)
+	ctx := context.Background()
+
+	const workers = 16
+	const iters = 5
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, workers*iters)
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func(worker int) {
+			defer wg.Done()
+			for i := 0; i < iters; i++ {
+				id := fmt.Sprintf("c-%d-%d", worker, i)
+				want := &widgets.Widget{ID: id, Description: id + "-desc", Price: float64(i)}
+				if err := repo.Save(ctx, want); err != nil {
+					errCh <- fmt.Errorf("save %s: %w", id, err)
+					return
+				}
+				got, err := repo.Load(ctx, id)
+				if err != nil {
+					errCh <- fmt.Errorf("load %s: %w", id, err)
+					return
+				}
+				if got.Description != want.Description || got.Price != want.Price {
+					errCh <- fmt.Errorf("mismatch %s: got %+v", id, got)
+					return
+				}
+			}
+		}(w)
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		t.Error(err)
 	}
 }
 

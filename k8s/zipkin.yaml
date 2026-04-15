@@ -17,7 +17,8 @@ spec:
     spec:
       containers:
         - name: zipkin
-          image: openzipkin/zipkin-slim:3
+          # renovate: datasource=docker depName=openzipkin/zipkin-slim
+          image: openzipkin/zipkin-slim:3.6.1
           ports:
             - containerPort: 9411
           resources:

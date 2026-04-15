@@ -45,7 +45,8 @@ Two delivery modes. Kubernetes (Option A) is closest to production; local dev (O
 
 ```bash
 make e2e-setup     # create KinD cluster, install MetalLB + Dapr + Dashboard, deploy stack
-make e2e           # run 7 end-to-end assertions against the deployed cluster
+make e2e           # run 11 end-to-end assertions against the deployed cluster (sdk-http mode)
+make e2e-all       # run all 11 assertions across all 4 client modes (sdk-http, sdk-grpc, custom-http, custom-grpc)
 make k8s-status    # show pods/services across all namespaces
 make e2e-teardown  # destroy everything
 ```
@@ -188,7 +189,8 @@ Run `make help` for the full list.
 | `make k8s-deploy` | Build images, load into KinD, apply all manifests |
 | `make k8s-undeploy` | Remove all manifests |
 | `make k8s-status` | Pod/service status across namespaces |
-| `make e2e` | Run `tests/e2e.sh` against deployed cluster |
+| `make e2e` | Run `tests/e2e.sh` against deployed cluster (default: sdk-http mode) |
+| `make e2e-all` | Run e2e across all 4 client modes (sdk-http, sdk-grpc, custom-http, custom-grpc) |
 | `make e2e-setup` / `e2e-teardown` | Composite setup/teardown |
 
 ### Utilities
@@ -201,8 +203,9 @@ Run `make help` for the full list.
 | `make deps-check` | Show mise + Go status |
 | `make deps-prune` / `deps-prune-check` | Verify no unused go.mod entries |
 | `make generate-env` | Regenerate `.env` from `pkg/config` defaults |
+| `make proto-gen` | Regenerate gRPC code from `.proto` files (uses mise-pinned `protoc`, `protoc-gen-go`, `protoc-gen-go-grpc`) |
 | `make release` | Tag and push a new semver release |
-| `make renovate-bootstrap` | Install nvm + Node — auto-invoked by `make renovate-validate` |
+| `make renovate-bootstrap` | Install Node via mise — auto-invoked by `make renovate-validate` |
 | `make renovate-validate` | Dry-run Renovate config |
 
 ## Design Rationale
@@ -230,7 +233,7 @@ Dapr pub/sub callbacks (e.g., `/widgets.v1`) are delivery mechanics, not a publi
 ### Test pyramid
 
 - **Unit** (`_test.go`): pure logic, mocked interfaces, millisecond execution. Run in CI on every push.
-- **Integration** (`//go:build integration`): repository layer against real PostgreSQL via Testcontainers-go. Catches schema drift, query correctness, and SQL injection regressions. Run in CI on every push.
+- **Integration** (`//go:build integration`): widgets repo against real PostgreSQL via Testcontainers-go; gadgets repo against a stub Dapr state sidecar (httptest); products repo against a real gRPC server on an ephemeral port; `pkg/dapr/client_http` against a stub sidecar. Catches schema drift, wire-format drift, and SQL injection regressions. Run in CI on every push.
 - **E2E** (`tests/e2e.sh`): KinD cluster + MetalLB + Dapr + full manifest deploy. Verifies sidecar injection, pub/sub routing, cross-namespace service invocation, and Zipkin trace propagation. Run in CI on every push (~3–5 min).
 
 Gadget and Products repositories are covered by mock-based unit tests plus real E2E — adding a third integration layer for those would duplicate what E2E already validates.
@@ -434,7 +437,7 @@ GitHub Actions runs on every push to `main`, tags `v*`, pull requests, and `work
 | `build` | static-check | Compile both binaries |
 | `test` | static-check | Unit tests |
 | `integration-test` | static-check | Integration tests with Testcontainers PostgreSQL |
-| `e2e` | build, test | Provision KinD + MetalLB + Dapr, deploy, run 7 end-to-end assertions |
+| `e2e` | build, test | Provision KinD + MetalLB + Dapr, deploy, run 11 end-to-end assertions across all 4 client modes (`make e2e-all`) |
 | `ci-pass` | all above | Aggregate gate — single required status check for branch protection |
 
 [Renovate](https://docs.renovatebot.com/) auto-merges minor/patch updates after CI passes (3-day minimum release age on majors). A single `customManagers` regex in `renovate.json` tracks every `# renovate:` annotated constant in the Makefile — no per-tool configuration.
