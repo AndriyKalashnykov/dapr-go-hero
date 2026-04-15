@@ -126,7 +126,7 @@ jobs:
           version: v0.31.0
           cluster_name: dapr-go-hero
           config: ./kind-config.yaml
-          node_image: kindest/node:v1.35.4
+          node_image: kindest/node:v1.35.1
 
       - name: Install MetalLB
         run: |

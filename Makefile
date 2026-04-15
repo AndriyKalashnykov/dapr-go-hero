@@ -24,8 +24,10 @@ DAPR_RUNTIME_VERSION  := 1.17.4
 # === K8s / Docker Versions (pinned) ===
 # renovate: datasource=github-releases depName=kubernetes-sigs/kind
 KIND_VERSION          := 0.31.0
-# Manual: bumped together with KIND_VERSION (see KinD release notes for matching node image)
-KIND_NODE_IMAGE       := v1.35.4
+# Manual: KinD publishes one `kindest/node:<version>` image per KinD release.
+# Track KIND_VERSION's release notes — do NOT bump past what that release ships.
+# KinD v0.31.0 ships kindest/node:v1.35.1 only (v1.35.4 Docker Hub manifest does not exist).
+KIND_NODE_IMAGE       := v1.35.1
 # renovate: datasource=github-releases depName=metallb/metallb
 METALLB_VERSION       := 0.15.3
 # renovate: datasource=github-releases depName=hadolint/hadolint
