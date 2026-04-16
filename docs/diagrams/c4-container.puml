@@ -18,45 +18,62 @@ UpdateElementStyle("container_queue",$fontColor="#FFFFFF", $bgColor="#DB2777", $
 UpdateElementStyle("system_ext",     $fontColor="#1E293B", $bgColor="#CBD5E1", $borderColor="#64748B")
 UpdateBoundaryStyle($bgColor="#F1F5F9", $borderColor="#94A3B8", $fontColor="#1E293B")
 
+LAYOUT_LEFT_RIGHT()
+
 title Container View — dapr-go-hero
 
-Person(publisher, "Event Publisher", "External system / test harness publishing CloudEvents")
+Person(publisher, "Event Publisher", "External system / test harness")
 
 System_Boundary(inv_ns, "Namespace: dapr-go-hero-inventory") {
-  Container(inventory, "Inventory Service", "Go 1.26, Fiber v3", "Public REST API (:3000); Dapr event handlers; content-routed by event.type")
-  Container(inv_dapr, "Dapr Sidecar", "Dapr 1.17.4", "pub/sub, state store, secret store, service invocation; resiliency (retry/timeout/CB); mTLS; tracing")
+  Container(inv_dapr, "Dapr Sidecar", "Dapr 1.17.4", "pub/sub, state store, secret store,\nservice invocation; resiliency; mTLS; tracing")
+  Container(inventory, "Inventory Service", "Go 1.26, Fiber v3", "Public REST API :3000; event handlers\nrouted by event.type")
 }
 
 System_Boundary(prod_ns, "Namespace: dapr-go-hero-products") {
-  Container(products, "Products Service", "Go 1.26, gRPC", "In-memory product store (:50151)")
-  Container(prod_dapr, "Dapr Sidecar", "Dapr 1.17.4", "access control: defaultAction=deny; allowlist = inventory only")
+  Container(prod_dapr, "Dapr Sidecar", "Dapr 1.17.4", "access control: defaultAction=deny;\nallowlist: inventory only")
+  Container(products, "Products Service", "Go 1.26, gRPC", "In-memory product store :50151")
 }
 
 System_Boundary(infra_ns, "Namespace: dapr-go-hero (infra)") {
-  ContainerQueue(redis, "Redis", "redis:8.6-alpine", "Streams-backed pub/sub topic 'inventory' (at-least-once) + gadget state store")
-  ContainerDb(postgres, "PostgreSQL", "postgres:18-alpine", "widgets table; credentials via Dapr secret store")
-  Container(zipkin, "Zipkin", "openzipkin/zipkin-slim:3.6.1", "Distributed tracing; spans from both sidecars")
+  ContainerQueue(redis, "Redis", "redis:8.6-alpine", "Streams-backed pub/sub topic 'inventory'\n+ gadget state store")
+  ContainerDb(postgres, "PostgreSQL", "postgres:18-alpine", "Widgets table")
+  Container(zipkin, "Zipkin", "openzipkin/zipkin-slim:3.6.1", "Traces from both sidecars")
 }
 
 System_Ext(k8s_secret, "Kubernetes Secret", "K8s API", "postgres/* — read via Dapr secret store")
 
+' --- layout hints (improve spacing / reduce crossings) ---
+Lay_R(publisher, inv_dapr)
+Lay_R(inv_dapr, inventory)
+Lay_D(inv_ns, prod_ns)
+Lay_R(inv_ns, infra_ns)
+Lay_D(prod_dapr, products)
+Lay_D(redis, postgres)
+Lay_D(postgres, zipkin)
+Lay_L(prod_ns, k8s_secret)
+
+' --- ingress / broker ---
 Rel(publisher, inv_dapr, "POST /v1.0/publish/pubsub/inventory", "HTTPS, CloudEvents v1.0")
-Rel(inv_dapr, redis, "XADD → 'inventory' stream")
-Rel(redis, inv_dapr, "XREADGROUP (redeliver after 30s)")
+Rel(inv_dapr, redis,     "XADD → 'inventory' stream")
+Rel(redis, inv_dapr,     "XREADGROUP (redeliver after 30s)")
 Rel(inv_dapr, inventory, "Deliver event — routed by event.type")
 
-Rel(inventory, inv_dapr, "widget.v1 → GetSecret(postgres)")
-Rel(inv_dapr, k8s_secret, "Read secret")
-Rel(inventory, postgres, "pgx: UPSERT widget")
+' --- widget route: Secret Store + PostgreSQL ---
+Rel(inventory, inv_dapr,    "widget.v1 → GetSecret(postgres)")
+Rel(inv_dapr, k8s_secret,   "Read secret")
+Rel(inventory, postgres,    "pgx: UPSERT widget")
 
+' --- gadget route: State Store ---
 Rel(inventory, inv_dapr, "gadget.v1 → SaveState(gadget)")
-Rel(inv_dapr, redis, "SET gadget:{id}")
+Rel(inv_dapr, redis,     "SET gadget:{id}")
 
-Rel(inventory, inv_dapr, "thingamajig.v1 → InvokeMethod(products)")
-Rel(inv_dapr, prod_dapr, "gRPC over mTLS; retry 3× + CB", "gRPC, mTLS")
-Rel(prod_dapr, products, "SaveProduct / GetProduct")
+' --- products route: Service Invocation + mTLS ---
+Rel(inventory, inv_dapr,  "thingamajig.v1 → InvokeMethod(products)")
+Rel(inv_dapr, prod_dapr,  "gRPC over mTLS; retry 3× + CB", "gRPC, mTLS")
+Rel(prod_dapr, products,  "SaveProduct / GetProduct")
 
-Rel(inv_dapr, zipkin, "spans")
+' --- tracing ---
+Rel(inv_dapr, zipkin,  "spans")
 Rel(prod_dapr, zipkin, "spans")
 
 SHOW_LEGEND()

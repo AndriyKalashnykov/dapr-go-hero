@@ -7,6 +7,8 @@
 
 Reference implementation of a Go microservice platform on [Dapr](https://dapr.io), comparing three client approaches (custom HTTP, custom gRPC, Dapr Go SDK) across four Dapr building blocks: Pub/Sub with content-based routing, State Store, Secret Store, and Service Invocation. Production-ready K8s deployment with KinD + MetalLB for local parity, Testcontainers-backed integration tests, and a CI pipeline that provisions a full Dapr cluster on every PR.
 
+<p align="center"><img src="docs/diagrams/out/c4-context.png" alt="C4 System Context: dapr-go-hero fans CloudEvents to Redis, PostgreSQL, Zipkin, and the Kubernetes Secret API" width="720"></p>
+
 [Slides](slides.pdf)
 
 ## Tech Stack

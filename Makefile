@@ -180,13 +180,13 @@ $(DIAGRAM_DIR)/out/%.png: $(DIAGRAM_DIR)/%.puml
 diagrams-clean:
 	@rm -rf $(DIAGRAM_DIR)/out
 
-#diagrams-check: @ Verify committed diagrams match current .puml sources (CI drift gate)
+#diagrams-check: @ Verify rendered diagrams match current .puml sources (CI drift gate)
 diagrams-check:
 	@if [ -z "$(DIAGRAM_SRC)" ]; then echo "No .puml sources — skipping."; exit 0; fi
 	@$(MAKE) --no-print-directory diagrams
 	@git diff --exit-code -- $(DIAGRAM_DIR)/out >/dev/null 2>&1 || { \
-		echo "ERROR: PlantUML source changed but rendered PNG not updated. Run 'make diagrams' and commit."; \
-		git checkout -- $(DIAGRAM_DIR)/out 2>/dev/null || true; \
+		echo "ERROR: PlantUML output drift. Run 'make diagrams' and stage $(DIAGRAM_DIR)/out."; \
+		git diff --name-status -- $(DIAGRAM_DIR)/out; \
 		exit 1; \
 	}
 

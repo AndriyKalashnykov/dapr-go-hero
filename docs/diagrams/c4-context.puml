@@ -1,0 +1,38 @@
+@startuml c4-context
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/v2.11.0/C4_Context.puml
+
+' Modern flat styling
+skinparam backgroundColor #FAFAFA
+skinparam shadowing false
+skinparam roundCorner 4
+skinparam defaultFontName "Inter, Helvetica, Arial, sans-serif"
+skinparam defaultFontSize 13
+skinparam ArrowColor #37474F
+skinparam ArrowThickness 1.2
+skinparam rectangleBorderThickness 1.3
+
+UpdateElementStyle("person",     $fontColor="#FFFFFF", $bgColor="#0F766E", $borderColor="#134E4A")
+UpdateElementStyle("system",     $fontColor="#FFFFFF", $bgColor="#2563EB", $borderColor="#1E3A8A")
+UpdateElementStyle("system_ext", $fontColor="#1E293B", $bgColor="#CBD5E1", $borderColor="#64748B")
+
+LAYOUT_TOP_DOWN()
+
+title System Context — dapr-go-hero
+
+Person(publisher, "Event Publisher", "External system / test harness publishing CloudEvents to the inventory topic")
+
+System(dgh, "dapr-go-hero", "Educational Dapr platform: inventory service fanning widget/gadget/product CloudEvents to three persistence paths")
+
+System_Ext(redis,    "Redis",               "Pub/sub broker (Streams) + gadget state store")
+System_Ext(postgres, "PostgreSQL",          "Widgets table")
+System_Ext(zipkin,   "Zipkin",              "Distributed tracing backend")
+System_Ext(k8s,      "Kubernetes Secret API","Supplies PostgreSQL credentials via Dapr secret store")
+
+Rel(publisher, dgh, "Publishes CloudEvents", "HTTPS / JSON")
+Rel(dgh, redis,    "pub/sub + state",         "Redis protocol (TCP 6379)")
+Rel(dgh, postgres, "Widget reads/writes",      "pgx (TCP 5432)")
+Rel(dgh, zipkin,   "Trace spans",              "HTTP")
+Rel(dgh, k8s,      "Secret lookups (DB creds)","K8s API")
+
+SHOW_LEGEND()
+@enduml
