@@ -197,7 +197,6 @@ The `make lint` composite gate runs:
 
 Items surfaced by `/upgrade-analysis` that are not immediately actionable. Review on next upgrade cycle.
 
-- [ ] Pin `ubuntu-latest` to `ubuntu-24.04` in CI workflows for fully reproducible builds — currently resolves correctly but will shift when GitHub promotes 26.04
 - [ ] Add `DAPR_CLI_VERSION` to Makefile if `dapr-init` or `dapr-run` targets are ever added (latest stable: v1.17.1)
 - [ ] Track `pgx/v5` CVEs GO-2026-4772 / GO-2026-4771 — **Fixed in: N/A upstream** (verified 2026-04-12). Code not reachable per govulncheck. Upgrade when patched version is released
 - [ ] Cross-project: align `golangci-lint` version in `go-todo-web` (v2.1.6) and `k8s-mcp-example` (v2.11.1) to current 2.11.4

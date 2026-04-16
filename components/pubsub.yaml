@@ -6,7 +6,16 @@ spec:
   type: pubsub.redis
   version: v1
   metadata:
-  - name: redisHost
-    value: localhost:6379
-  - name: redisPassword
-    value: ""
+    - name: redisHost
+      value: localhost:6379
+    - name: redisPassword
+      value: ""
+    # At-least-once redelivery tuning — matches k8s/dapr/pubsub.yaml
+    - name: processingTimeout
+      value: "30s"
+    - name: redeliverInterval
+      value: "5s"
+    - name: queueDepth
+      value: "100"
+    - name: concurrency
+      value: "parallel"

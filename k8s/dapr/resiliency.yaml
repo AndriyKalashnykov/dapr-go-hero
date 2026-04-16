@@ -18,6 +18,15 @@ spec:
         policy: constant
         duration: 1s
         maxRetries: 5
+      pubsub-inbound-retry:
+        # Applied when the subscriber handler returns an error.
+        # With Redis Streams + processingTimeout, unacked messages
+        # are redelivered; this policy controls per-app retry
+        # semantics on top of broker-level redelivery.
+        policy: exponential
+        duration: 500ms
+        maxInterval: 10s
+        maxRetries: -1
       service-retry:
         policy: exponential
         duration: 200ms
@@ -42,5 +51,7 @@ spec:
       pubsub:
         outbound:
           retry: pubsub-retry
+        inbound:
+          retry: pubsub-inbound-retry
 scopes:
   - inventory

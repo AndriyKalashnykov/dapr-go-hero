@@ -261,16 +261,17 @@ check_resiliency() {
   kubectl scale deployment/products -n "${NAMESPACE_PRODUCTS}" --replicas=1
   kubectl rollout status deployment/products -n "${NAMESPACE_PRODUCTS}" --timeout=120s
 
-  echo "  Polling up to 30s for redelivery..."
+  # Upper bound = Dapr Redis processingTimeout (30s) + redeliverInterval
+  # (5s) + inbound retry backoff, plus slack. Poll up to 90s.
+  echo "  Polling up to 90s for redelivery..."
   local base="http://localhost:3000"
   kubectl port-forward svc/inventory 3000:3000 -n "${NAMESPACE_INVENTORY}" >/dev/null 2>&1 &
   PF_PIDS+=($!)
-  sleep 2  # let port-forward establish; no reachability gate here —
-           # the endpoint may legitimately 404 while Dapr retries, and
-           # a gate that counts 404 as FAIL masks the actual assertion below.
+  sleep 2  # port-forward establishment; no reachability gate —
+           # endpoint may legitimately 404 while Dapr retries.
 
   local ok=0
-  for _ in $(seq 1 30); do
+  for _ in $(seq 1 90); do
     if curl -sf --max-time 2 "${base}/v1/products/resil-thing" 2>/dev/null \
         | jq -e '.description == "'"${resil_desc}"'"' >/dev/null 2>&1; then
       ok=1; break
@@ -282,30 +283,38 @@ check_resiliency() {
     echo "  PASS: redelivery processed after products restarted"
     PASS=$((PASS+1))
   else
-    # Not a hard failure: redelivery semantics depend on broker config.
-    # Redis pubsub does not ack-retry, so published-during-outage events
-    # may be lost. The recovery itself (pod restart, sidecar resume) is
-    # still validated by the rest of the e2e suite.
-    echo "  WARN: event not redelivered after recovery (Redis pubsub does not ack-retry by default)"
+    echo "  FAIL: event not redelivered after 90s — Redis Streams ack-retry may be misconfigured"
+    FAIL=$((FAIL+1))
   fi
 }
 
 # ---- access control (informational) ---------------------------------------
 
-# check_access_control verifies the current posture of the products service
-# access control policy. The shipped configuration.yaml uses
-# `defaultAction: allow` so any app-id may invoke products today; this test
-# documents that and will break when the policy is tightened to `deny` — at
-# which point the failing assertion is a signal to update the test.
+# check_access_control asserts that the products Dapr Configuration
+# denies by default and explicitly allows inventory. A regression that
+# loosens defaultAction to "allow" will fail this check.
 check_access_control() {
-  echo "=== Access control (informational) ==="
-  local deny_count
-  deny_count=$(kubectl get configuration dapr-config -n "${NAMESPACE_PRODUCTS}" \
+  echo "=== Access control ==="
+  local default_action
+  default_action=$(kubectl get configuration dapr-config -n "${NAMESPACE_PRODUCTS}" \
     -o jsonpath='{.spec.accessControl.defaultAction}' 2>/dev/null || echo "")
-  if [[ "${deny_count}" == "deny" ]]; then
-    echo "  INFO: products defaultAction=deny — ACL enforces allowlist (tighten test)"
+  if [[ "${default_action}" == "deny" ]]; then
+    echo "  PASS: products defaultAction=deny (ACL enforces allowlist)"
+    PASS=$((PASS+1))
   else
-    echo "  INFO: products defaultAction=${deny_count:-allow} — any app-id may invoke products"
+    echo "  FAIL: products defaultAction=${default_action:-allow} — should be deny"
+    FAIL=$((FAIL+1))
+  fi
+
+  local allowed
+  allowed=$(kubectl get configuration dapr-config -n "${NAMESPACE_PRODUCTS}" \
+    -o jsonpath='{.spec.accessControl.policies[?(@.appId=="inventory")].appId}' 2>/dev/null || echo "")
+  if [[ "${allowed}" == "inventory" ]]; then
+    echo "  PASS: inventory is explicitly allowlisted"
+    PASS=$((PASS+1))
+  else
+    echo "  FAIL: inventory is not in the products accessControl policies list"
+    FAIL=$((FAIL+1))
   fi
 }
 

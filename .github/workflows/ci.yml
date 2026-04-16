@@ -29,7 +29,7 @@ permissions:
 jobs:
 
   static-check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -46,7 +46,7 @@ jobs:
 
   build:
     needs: [static-check]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -63,7 +63,7 @@ jobs:
 
   test:
     needs: [static-check]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout
@@ -80,7 +80,7 @@ jobs:
 
   integration-test:
     needs: [static-check]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -97,7 +97,7 @@ jobs:
         run: make integration-test
 
   docker-lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Checkout
@@ -108,7 +108,7 @@ jobs:
 
   e2e:
     needs: [build, test]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
       - name: Checkout
@@ -186,7 +186,7 @@ jobs:
 
   ci-pass:
     needs: [static-check, docker-lint, build, test, integration-test, e2e]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 1
     if: always()
     steps:

@@ -46,7 +46,10 @@ spec:
     controlPlaneTrustDomain: "cluster.local"
     sentryAddress: "dapr-sentry.dapr-system.svc:443"
   accessControl:
-    defaultAction: allow
+    # Deny-by-default for the products service: any app-id other than
+    # inventory (from the inventory namespace) is rejected at the
+    # sidecar boundary. Tightens the earlier informational-only posture.
+    defaultAction: deny
     trustDomain: "cluster.local"
     policies:
       - appId: inventory

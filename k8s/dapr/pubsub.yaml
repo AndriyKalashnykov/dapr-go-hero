@@ -11,3 +11,16 @@ spec:
       value: "redis.dapr-go-hero.svc.cluster.local:6379"
     - name: redisPassword
       value: ""
+    # At-least-once redelivery tuning (Redis Streams, consumer groups).
+    # processingTimeout: how long a claimed message may be held before
+    # Dapr assumes the subscriber died and re-delivers via XPENDING.
+    - name: processingTimeout
+      value: "30s"
+    # redeliverInterval: frequency of scanning pending entries for
+    # messages that exceeded processingTimeout.
+    - name: redeliverInterval
+      value: "5s"
+    - name: queueDepth
+      value: "100"
+    - name: concurrency
+      value: "parallel"
