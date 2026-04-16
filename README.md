@@ -126,88 +126,6 @@ Install everything:
 make deps
 ```
 
-## Make Targets
-
-Run `make help` for the full list.
-
-### Build & Test
-
-| Target | Description |
-|--------|-------------|
-| `make build` | Compile both binaries (static, CGO disabled) |
-| `make test` | Unit tests (`go test -race ./...`) |
-| `make integration-test` | Integration tests against real PostgreSQL (Testcontainers) |
-| `make clean` | Remove build artifacts |
-| `make update` | `go get -u ./... && go mod tidy` |
-
-### Quality Gates
-
-| Target | Description |
-|--------|-------------|
-| `make static-check` | Composite gate: lint + sec + mermaid-lint + deps-prune-check |
-| `make lint` | golangci-lint (with gocritic) + mermaid-lint |
-| `make sec` | gosec SAST scan |
-| `make mermaid-lint` | Validate Mermaid diagrams via `minlag/mermaid-cli` Docker image |
-
-### CI
-
-| Target | Description |
-|--------|-------------|
-| `make ci` | Full local pipeline: deps → static-check → test → integration-test → build |
-| `make ci-run` | Execute GitHub Actions workflow locally via [act](https://github.com/nektos/act) |
-
-### Dapr Services
-
-| Target | Description |
-|--------|-------------|
-| `make run` | Inventory service with Dapr (default: SDK HTTP mode) |
-| `make run-products` | Products gRPC service |
-| `make run-custom-http` | Inventory with custom HTTP client |
-| `make run-custom-grpc` | Inventory with custom gRPC client |
-| `make run-sdk-http` | Inventory with Dapr Go SDK over HTTP |
-| `make run-sdk-grpc` | Inventory with Dapr Go SDK over gRPC |
-| `make dapr-test` | Dapr sidecar only (no app) — useful for API debugging |
-
-### Events & Queries
-
-| Target | Description |
-|--------|-------------|
-| `make send-widget` / `send-gadget` / `send-thingamajig` | Publish individual CloudEvents |
-| `make send-all` | Publish all three event types |
-| `make get-widget` / `get-gadget` / `get-thingamajig` | GET individual items |
-| `make get-all` | GET all three |
-
-### Docker & Kubernetes
-
-| Target | Description |
-|--------|-------------|
-| `make docker-build` | Build both images (BuildKit + cache mounts) |
-| `make docker-push` | Push to `$(REGISTRY)` |
-| `make docker-lint` | Hadolint on Dockerfiles |
-| `make kind-up` | Create KinD cluster + MetalLB + Dapr + Dashboard |
-| `make kind-down` | Destroy cluster |
-| `make k8s-deploy` | Build images, load into KinD, apply all manifests |
-| `make k8s-undeploy` | Remove all manifests |
-| `make k8s-status` | Pod/service status across namespaces |
-| `make e2e` | Run `tests/e2e.sh` against deployed cluster (default: sdk-http mode) |
-| `make e2e-all` | Run e2e across all 4 client modes (sdk-http, sdk-grpc, custom-http, custom-grpc) |
-| `make e2e-setup` / `e2e-teardown` | Composite setup/teardown |
-
-### Utilities
-
-| Target | Description |
-|--------|-------------|
-| `make deps` | Install pinned tools (idempotent) |
-| `make deps-act` | Install [act](https://github.com/nektos/act) — auto-invoked by `make ci-run` |
-| `make deps-hadolint` | Install hadolint — auto-invoked by `make docker-lint` |
-| `make deps-check` | Show mise + Go status |
-| `make deps-prune` / `deps-prune-check` | Verify no unused go.mod entries |
-| `make generate-env` | Regenerate `.env` from `pkg/config` defaults |
-| `make proto-gen` | Regenerate gRPC code from `.proto` files (uses mise-pinned `protoc`, `protoc-gen-go`, `protoc-gen-go-grpc`) |
-| `make release` | Tag and push a new semver release |
-| `make renovate-bootstrap` | Install Node via mise — auto-invoked by `make renovate-validate` |
-| `make renovate-validate` | Dry-run Renovate config |
-
 ## Design Rationale
 
 ### Package organization
@@ -425,6 +343,88 @@ make get-all
 ```
 
 Each `run-*` target maps to a different code path in `cmd/inventory/main.go` and exercises the same interfaces (`state.Store`, `secrets.Store`) through a different transport.
+
+## Make Targets
+
+Run `make help` for the full list.
+
+### Build & Test
+
+| Target | Description |
+|--------|-------------|
+| `make build` | Compile both binaries (static, CGO disabled) |
+| `make test` | Unit tests (`go test -race ./...`) |
+| `make integration-test` | Integration tests against real PostgreSQL (Testcontainers) |
+| `make clean` | Remove build artifacts |
+| `make update` | `go get -u ./... && go mod tidy` |
+
+### Quality Gates
+
+| Target | Description |
+|--------|-------------|
+| `make static-check` | Composite gate: lint + sec + mermaid-lint + deps-prune-check |
+| `make lint` | golangci-lint (with gocritic) + mermaid-lint |
+| `make sec` | gosec SAST scan |
+| `make mermaid-lint` | Validate Mermaid diagrams via `minlag/mermaid-cli` Docker image |
+
+### CI
+
+| Target | Description |
+|--------|-------------|
+| `make ci` | Full local pipeline: deps → static-check → test → integration-test → build |
+| `make ci-run` | Execute GitHub Actions workflow locally via [act](https://github.com/nektos/act) |
+
+### Dapr Services
+
+| Target | Description |
+|--------|-------------|
+| `make run` | Inventory service with Dapr (default: SDK HTTP mode) |
+| `make run-products` | Products gRPC service |
+| `make run-custom-http` | Inventory with custom HTTP client |
+| `make run-custom-grpc` | Inventory with custom gRPC client |
+| `make run-sdk-http` | Inventory with Dapr Go SDK over HTTP |
+| `make run-sdk-grpc` | Inventory with Dapr Go SDK over gRPC |
+| `make dapr-test` | Dapr sidecar only (no app) — useful for API debugging |
+
+### Events & Queries
+
+| Target | Description |
+|--------|-------------|
+| `make send-widget` / `send-gadget` / `send-thingamajig` | Publish individual CloudEvents |
+| `make send-all` | Publish all three event types |
+| `make get-widget` / `get-gadget` / `get-thingamajig` | GET individual items |
+| `make get-all` | GET all three |
+
+### Docker & Kubernetes
+
+| Target | Description |
+|--------|-------------|
+| `make docker-build` | Build both images (BuildKit + cache mounts) |
+| `make docker-push` | Push to `$(REGISTRY)` |
+| `make docker-lint` | Hadolint on Dockerfiles |
+| `make kind-up` | Create KinD cluster + MetalLB + Dapr + Dashboard |
+| `make kind-down` | Destroy cluster |
+| `make k8s-deploy` | Build images, load into KinD, apply all manifests |
+| `make k8s-undeploy` | Remove all manifests |
+| `make k8s-status` | Pod/service status across namespaces |
+| `make e2e` | Run `tests/e2e.sh` against deployed cluster (default: sdk-http mode) |
+| `make e2e-all` | Run e2e across all 4 client modes (sdk-http, sdk-grpc, custom-http, custom-grpc) |
+| `make e2e-setup` / `e2e-teardown` | Composite setup/teardown |
+
+### Utilities
+
+| Target | Description |
+|--------|-------------|
+| `make deps` | Install pinned tools (idempotent) |
+| `make deps-act` | Install [act](https://github.com/nektos/act) — auto-invoked by `make ci-run` |
+| `make deps-hadolint` | Install hadolint — auto-invoked by `make docker-lint` |
+| `make deps-check` | Show mise + Go status |
+| `make deps-prune` / `deps-prune-check` | Verify no unused go.mod entries |
+| `make generate-env` | Regenerate `.env` from `pkg/config` defaults |
+| `make proto-gen` | Regenerate gRPC code from `.proto` files (uses mise-pinned `protoc`, `protoc-gen-go`, `protoc-gen-go-grpc`) |
+| `make release` | Tag and push a new semver release |
+| `make renovate-bootstrap` | Install Node via mise — auto-invoked by `make renovate-validate` |
+| `make renovate-validate` | Dry-run Renovate config |
 
 ## CI/CD
 

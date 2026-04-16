@@ -9,7 +9,6 @@ require (
 	github.com/go-logr/logr v1.4.3
 	github.com/gofiber/fiber/v3 v3.1.0
 	github.com/jackc/pgx/v5 v5.9.1
-	github.com/joho/godotenv v1.5.1
 	github.com/oklog/run v1.2.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.42.0
 	go.uber.org/zap v1.27.1

@@ -1,14 +1,14 @@
 // Package config provides environment-based configuration with sensible defaults.
 // All host/port values are configurable for both local development and Kubernetes deployment.
 //
-// On startup, a .env file in the working directory is loaded (if present) using godotenv.
+// On startup, a .env file in the working directory is loaded (if present).
 // Existing environment variables take precedence — .env never overwrites them.
 package config
 
 import (
+	"bufio"
 	"os"
-
-	"github.com/joho/godotenv"
+	"strings"
 )
 
 // defaults is the single source of truth for every config key and its default value.
@@ -40,7 +40,38 @@ type entry struct {
 
 func init() {
 	// Load .env if present; never overwrites existing env vars.
-	_ = godotenv.Load()
+	loadDotenv(".env")
+}
+
+// loadDotenv parses a KEY=VALUE file and sets each key in the process
+// environment only if it is unset. Unquotes surrounding "" or '' and
+// skips blank lines and comments (`#`). Silent on missing files.
+func loadDotenv(path string) {
+	f, err := os.Open(path) // #nosec G304 -- path comes from trusted caller (init: hardcoded ".env", tests: t.TempDir())
+	if err != nil {
+		return
+	}
+	defer func() { _ = f.Close() }()
+
+	s := bufio.NewScanner(f)
+	for s.Scan() {
+		line := strings.TrimSpace(s.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		eq := strings.IndexByte(line, '=')
+		if eq <= 0 {
+			continue
+		}
+		key := strings.TrimSpace(line[:eq])
+		val := strings.TrimSpace(line[eq+1:])
+		if len(val) >= 2 && (val[0] == '"' || val[0] == '\'') && val[0] == val[len(val)-1] {
+			val = val[1 : len(val)-1]
+		}
+		if _, ok := os.LookupEnv(key); !ok {
+			_ = os.Setenv(key, val)
+		}
+	}
 }
 
 // env returns the value of the named environment variable, or fallback if unset/empty.
