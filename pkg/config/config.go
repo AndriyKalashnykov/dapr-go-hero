@@ -44,7 +44,7 @@ func init() {
 }
 
 // loadDotenv parses a KEY=VALUE file and sets each key in the process
-// environment only if it is unset. Unquotes surrounding "" or '' and
+// environment only if it is unset. Unquotes surrounding "" or ” and
 // skips blank lines and comments (`#`). Silent on missing files.
 func loadDotenv(path string) {
 	f, err := os.Open(path) // #nosec G304 -- path comes from trusted caller (init: hardcoded ".env", tests: t.TempDir())

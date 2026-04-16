@@ -28,10 +28,23 @@ spec:
         dapr.io/sidecar-memory-limit: "128Mi"
     spec:
       serviceAccountName: products
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: products
           image: dapr-go-hero/products:dev
           imagePullPolicy: IfNotPresent
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - name: grpc
               containerPort: 50151

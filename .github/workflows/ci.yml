@@ -123,13 +123,17 @@ jobs:
           config: ./kind-config.yaml
           node_image: kindest/node:v1.35.1
 
-      - name: Install MetalLB
+      # cloud-provider-kind runs on the host (not in the cluster). It watches
+      # Services of type LoadBalancer and allocates IPs on the 'kind' Docker
+      # network. Kind-team maintained, works on any supported kindest/node
+      # version. Replaces MetalLB.
+      - name: Install cloud-provider-kind
         run: |
-          kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.15.3/config/manifests/metallb-native.yaml
-          kubectl rollout status deployment/controller -n metallb-system --timeout=180s
-          kubectl rollout status daemonset/speaker -n metallb-system --timeout=180s
-          ip_sub=$(docker network inspect kind -f '{{index .IPAM.Config 0 "Subnet"}}' | awk -F. '{printf "%d.%d\n", $1, $2}')
-          sed "s/METALLB_IP_SUB/${ip_sub}/g" k8s/metallb-config.yaml | kubectl apply -f -
+          docker run --rm -d \
+            --name cloud-provider-kind \
+            --network kind \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            registry.k8s.io/cloud-provider-kind/cloud-controller-manager:v0.10.0
 
       - name: Install Dapr
         uses: dapr/setup-dapr@8d980918fd43a2765c143ce7f687665b2d46a6b9 # v2

@@ -13,7 +13,7 @@ import (
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/errorz"
 )
 
-type HTTP struct{
+type HTTP struct {
 	client *client.Client
 }
 

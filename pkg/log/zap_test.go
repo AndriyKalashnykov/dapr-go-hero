@@ -140,9 +140,9 @@ func TestToZapLevel(t *testing.T) {
 		logr int
 		zap  zapcore.Level
 	}{
-		{0, zapcore.InfoLevel},   // logr 0 = zap Info (0)
-		{1, zapcore.Level(-1)},   // logr 1 = zap Debug (-1)
-		{5, zapcore.Level(-5)},   // logr 5 = very verbose
+		{0, zapcore.InfoLevel}, // logr 0 = zap Info (0)
+		{1, zapcore.Level(-1)}, // logr 1 = zap Debug (-1)
+		{5, zapcore.Level(-5)}, // logr 5 = very verbose
 	}
 
 	for _, tt := range tests {

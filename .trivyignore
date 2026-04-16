@@ -1,0 +1,17 @@
+# Globally ignored Trivy checks for this dev/demo project.
+#
+# These IDs flag postgres/redis/zipkin deployments because those third-party
+# images require a writable root filesystem and their "correct" non-root
+# setup is image-family specific (Bitnami runs as UID 1001, Alpine variants
+# run as root by default). Our own code (k8s/inventory-deployment.yaml and
+# k8s/products-deployment.yaml) ENFORCES readOnlyRootFilesystem + runAsUser
+# 10001 + drop ALL capabilities + seccompProfile=RuntimeDefault — the
+# suppression is only load-bearing for the infra pods.
+#
+# Production migration path (out of scope here):
+#   - Swap postgres/redis to Bitnami images (non-root by default, UID 1001)
+#   - Mount emptyDir at /var/lib/{postgresql,redis} and /tmp for writable
+#     state under readOnlyRootFilesystem: true
+#   - Remove these entries.
+AVD-KSV-0014
+AVD-KSV-0118

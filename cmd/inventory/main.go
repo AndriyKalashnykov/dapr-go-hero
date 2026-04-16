@@ -8,12 +8,12 @@ import (
 	"os"
 	"time"
 
+	zaplog "github.com/AndriyKalashnykov/dapr-go-hero/pkg/log"
 	"github.com/cenkalti/backoff/v5"
 	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/go-sdk/service/common"
 	dapr_server_grpc "github.com/dapr/go-sdk/service/grpc"
 	dapr_server_http "github.com/dapr/go-sdk/service/http"
-	zaplog "github.com/AndriyKalashnykov/dapr-go-hero/pkg/log"
 	"github.com/gofiber/fiber/v3"
 	"github.com/oklog/run"
 	"go.uber.org/zap"

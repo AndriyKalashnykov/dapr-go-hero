@@ -40,10 +40,23 @@ spec:
         dapr.io/sidecar-memory-limit: "128Mi"
     spec:
       serviceAccountName: inventory
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: inventory
           image: dapr-go-hero/inventory:dev
           imagePullPolicy: IfNotPresent
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - name: api
               containerPort: 3000

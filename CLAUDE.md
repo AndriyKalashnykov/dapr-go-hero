@@ -12,12 +12,18 @@ Educational Go application demonstrating Dapr building blocks (Pub/Sub with rout
 make help               # List all available Make targets
 make deps               # Install tool dependencies (mise, gosec, golangci-lint) if missing
 make clean              # Remove build artifacts
-make static-check       # Composite quality gate: lint + sec + mermaid-lint + deps-prune-check
-make lint               # Run golangci-lint (includes gocritic) + mermaid-lint
+make static-check       # Composite quality gate: lint-ci + lint + sec + vulncheck + secrets + trivy-fs + trivy-config + mermaid-lint + diagrams-check + deps-prune-check
+make lint               # Run golangci-lint (includes gocritic, gosec via .golangci.yml)
+make lint-ci            # Lint GitHub Actions workflows (actionlint + shellcheck)
 make sec                # Run gosec security scanner (excludes generated proto/ dir)
+make vulncheck          # Check dependencies for known vulnerabilities (govulncheck)
+make secrets            # Scan for hardcoded secrets (gitleaks)
+make trivy-fs           # Filesystem scan for CVEs / secrets / misconfigs (CRITICAL, HIGH)
+make trivy-config       # K8s manifest scan for security misconfigurations (KSV-*)
 make test               # Run unit tests (go test -race -v ./...)
 make integration-test   # Run integration tests (real PostgreSQL + Dapr-state stub + gRPC server)
 make build              # Compile both binaries (depends on deps only)
+make format             # Auto-format Go source (golangci-lint --fix + gofmt)
 make proto-gen          # Regenerate gRPC code from .proto files (mise-pinned protoc)
 make update             # Update all deps to latest (go get -u ./... && go mod tidy)
 make ci                 # Full CI pipeline: deps → static-check → test → integration-test → build
@@ -28,15 +34,18 @@ make deps-prune-check   # Verify no prunable dependencies (CI gate)
 make release            # Tag and push a release (runs full build first)
 make docker-build       # Build container images (inventory + products)
 make docker-lint        # Lint Dockerfiles with hadolint
-make kind-up            # Create KinD cluster with MetalLB + Dapr + Dashboard
-make kind-down          # Destroy KinD cluster
+make kind-up            # Full stack: create KinD cluster + cloud-provider-kind + Dapr + deploy manifests (alias for kind-deploy)
+make kind-down          # Full teardown (alias for kind-destroy)
+make kind-create        # Cluster + LoadBalancer controller + Dapr only (no app deploy)
+make kind-deploy        # kind-create + k8s-deploy (full stack up)
+make kind-destroy       # Delete cluster + stop cloud-provider-kind container
 make k8s-deploy         # Build images, load into KinD, deploy all manifests
 make k8s-undeploy       # Remove all K8s manifests
 make k8s-status         # Show pod/service status across all namespaces
 make e2e                # Run end-to-end tests (default: sdk-http mode)
 make e2e-all            # Run e2e across all 4 client modes (sdk-http, sdk-grpc, custom-http, custom-grpc)
-make e2e-setup          # Full setup: kind-up + k8s-deploy
-make e2e-teardown       # Full teardown: k8s-undeploy + kind-down
+make e2e-setup          # Alias for kind-deploy (CI compatibility)
+make e2e-teardown       # k8s-undeploy + kind-destroy (CI compatibility)
 ```
 
 Run a single test:
@@ -142,7 +151,7 @@ Dapr features demonstrated in K8s manifests (`k8s/dapr/`):
 
 Container images: `Dockerfile.inventory` and `Dockerfile.products` (multi-stage Alpine + BuildKit cache mounts).
 
-Local cluster: KinD + MetalLB (L2) for LoadBalancer support. `make e2e-setup` creates the full environment.
+Local cluster: KinD + cloud-provider-kind (kind-team-maintained host-side LoadBalancer controller — no in-cluster MetalLB DaemonSet). `make kind-up` creates the full environment.
 
 ## CI/CD
 
@@ -173,7 +182,7 @@ make proto-gen
 
 The `proto-gen` target pins `protoc`, `protoc-gen-go`, and `protoc-gen-go-grpc` to versions set in `.mise.toml` (installed via `mise install`), so regeneration is reproducible. The target calls `mise exec -- protoc` directly so PATH ordering doesn't matter.
 
-The Dapr cluster runtime version is pinned in the Makefile as `DAPR_RUNTIME_VERSION` (`make kind-up` passes it to `dapr init -k --runtime-version $(DAPR_RUNTIME_VERSION)`). Keeps local clusters aligned with CI's pinned sidecar version regardless of the developer's Dapr CLI default.
+The Dapr cluster runtime version is pinned in the Makefile as `DAPR_RUNTIME_VERSION` (`make kind-create` passes it to `dapr init -k --runtime-version $(DAPR_RUNTIME_VERSION)`). Keeps local clusters aligned with CI's pinned sidecar version regardless of the developer's Dapr CLI default.
 
 ## Static Analysis
 

@@ -16,9 +16,10 @@ FROM alpine:3.23
 
 # hadolint ignore=DL3018
 RUN apk add --no-cache ca-certificates \
-    && addgroup -S app && adduser -S app -G app
+    && addgroup -S -g 10001 app \
+    && adduser -S -u 10001 -G app app
 
-USER app
+USER 10001
 
 COPY --from=builder /products /products
 

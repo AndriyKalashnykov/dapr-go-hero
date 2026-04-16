@@ -5,41 +5,56 @@ APP_NAME       := dapr-go-hero
 CURRENTTAG     := $(shell git describe --tags --abbrev=0 2>/dev/null || echo "dev")
 GOFLAGS        := -mod=mod
 
+# Ensure tools installed to ~/.local/bin (hadolint, act, gitleaks, actionlint,
+# shellcheck, trivy, mise) are on PATH for every recipe — needed inside the
+# act runner container where this path is not preconfigured.
+export PATH := $(HOME)/.local/bin:$(PATH)
+
 # === Tool Versions (pinned) ===
 # renovate: datasource=github-releases depName=securego/gosec
-GOSEC_VERSION         := 2.25.0
+GOSEC_VERSION                 := 2.25.0
 # renovate: datasource=github-releases depName=golangci/golangci-lint
-GOLANGCI_LINT_VERSION := 2.11.4
+GOLANGCI_LINT_VERSION         := 2.11.4
+# renovate: datasource=go depName=golang.org/x/vuln/cmd/govulncheck
+GOVULNCHECK_VERSION           := 1.1.4
+# renovate: datasource=github-releases depName=zricethezav/gitleaks
+GITLEAKS_VERSION              := 8.30.1
+# renovate: datasource=github-releases depName=rhysd/actionlint
+ACTIONLINT_VERSION            := 1.7.12
+# renovate: datasource=github-releases depName=koalaman/shellcheck
+SHELLCHECK_VERSION            := 0.11.0
+# renovate: datasource=github-releases depName=aquasecurity/trivy
+TRIVY_VERSION                 := 0.69.3
 # renovate: datasource=github-releases depName=nektos/act
-ACT_VERSION           := 0.2.87
+ACT_VERSION                   := 0.2.87
 # renovate: datasource=github-releases depName=jdx/mise
-MISE_VERSION          := 2026.4.14
+MISE_VERSION                  := 2026.4.14
 
 # === Dapr Versions (pinned) ===
 # renovate: datasource=github-releases depName=dapr/dapr
-DAPR_RUNTIME_VERSION  := 1.17.4
+DAPR_RUNTIME_VERSION          := 1.17.4
 
 # Codegen tool versions (protoc, protoc-gen-go, protoc-gen-go-grpc) are pinned in .mise.toml
 
 # === K8s / Docker Versions (pinned) ===
 # renovate: datasource=github-releases depName=kubernetes-sigs/kind
-KIND_VERSION          := 0.31.0
+KIND_VERSION                  := 0.31.0
 # Manual: KinD publishes one `kindest/node:<version>` image per KinD release.
 # Track KIND_VERSION's release notes — do NOT bump past what that release ships.
-# KinD v0.31.0 ships kindest/node:v1.35.1 only (v1.35.4 Docker Hub manifest does not exist).
-KIND_NODE_IMAGE       := v1.35.1
-# renovate: datasource=github-releases depName=metallb/metallb
-METALLB_VERSION       := 0.15.3
+# KinD v0.31.0 ships kindest/node:v1.35.1 only.
+KIND_NODE_IMAGE               := v1.35.1
+# renovate: datasource=github-releases depName=kubernetes-sigs/cloud-provider-kind
+CLOUD_PROVIDER_KIND_VERSION   := 0.10.0
 # renovate: datasource=github-releases depName=hadolint/hadolint
-HADOLINT_VERSION      := 2.14.0
+HADOLINT_VERSION              := 2.14.0
 # renovate: datasource=docker depName=minlag/mermaid-cli
-MERMAID_CLI_VERSION   := 11.12.0
+MERMAID_CLI_VERSION           := 11.12.0
 # renovate: datasource=docker depName=plantuml/plantuml
-PLANTUML_VERSION      := 1.2026.2
+PLANTUML_VERSION              := 1.2026.2
 
 # === Docker / K8s Config ===
-CLUSTER_NAME   := dapr-go-hero
-REGISTRY       ?= dapr-go-hero
+CLUSTER_NAME   := $(APP_NAME)
+REGISTRY       ?= $(APP_NAME)
 TAG            ?= dev
 NS_INFRA       := dapr-go-hero
 NS_INVENTORY   := dapr-go-hero-inventory
@@ -48,22 +63,19 @@ NS_PRODUCTS    := dapr-go-hero-products
 # === Go Version Management ===
 GO_VERSION := $(shell grep -oP '^go \K[0-9.]+' go.mod)
 
-# Helper: run a command under the correct Go version.
-# mise auto-activates via shell hook; actions/setup-go handles CI.
-# PATH already has the right `go` binary in both cases — no wrapping needed.
-define go-exec
-bash -c '$(1)'
-endef
-
 #help: @ List available tasks
 help:
 	@echo "Usage: make COMMAND"
 	@echo "Commands :"
 	@grep -E '[a-zA-Z\.\-]+:.*?@ .*$$' $(MAKEFILE_LIST)| tr -d '#' | awk 'BEGIN {FS = ":.*?@ "}; {printf "\033[32m%-25s\033[0m - %s\n", $$1, $$2}'
 
+# =============================================================================
+# deps — tool installation (idempotent, no sudo, installs to ~/.local/bin)
+# =============================================================================
+
 #deps: @ Install required tool dependencies (idempotent)
 deps:
-	@# Install mise if not present (local development only, CI uses actions/setup-go)
+	@# Install mise if not present (local development only, CI uses jdx/mise-action)
 	@if [ -z "$$CI" ] && ! command -v mise >/dev/null 2>&1; then \
 		echo "Installing mise v$(MISE_VERSION)..."; \
 		curl -fsSL https://mise.jdx.dev/install.sh | MISE_VERSION=v$(MISE_VERSION) bash; \
@@ -78,16 +90,65 @@ deps:
 	else \
 		command -v go >/dev/null 2>&1 || { echo "Error: Go required. Install mise (https://mise.jdx.dev) or Go (https://go.dev/dl/)"; exit 1; }; \
 	fi
-	@$(call go-exec,command -v gosec) >/dev/null 2>&1 || { echo "Installing gosec v$(GOSEC_VERSION)..."; \
-		$(call go-exec,go install github.com/securego/gosec/v2/cmd/gosec@v$(GOSEC_VERSION)); }
-	@$(call go-exec,command -v golangci-lint) >/dev/null 2>&1 || { echo "Installing golangci-lint v$(GOLANGCI_LINT_VERSION)..."; \
-		$(call go-exec,go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v$(GOLANGCI_LINT_VERSION)); }
-
+	@command -v gosec >/dev/null 2>&1 || { echo "Installing gosec v$(GOSEC_VERSION)..."; \
+		go install github.com/securego/gosec/v2/cmd/gosec@v$(GOSEC_VERSION); }
+	@command -v golangci-lint >/dev/null 2>&1 || { echo "Installing golangci-lint v$(GOLANGCI_LINT_VERSION)..."; \
+		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v$(GOLANGCI_LINT_VERSION); }
+	@command -v govulncheck >/dev/null 2>&1 || { echo "Installing govulncheck v$(GOVULNCHECK_VERSION)..."; \
+		go install golang.org/x/vuln/cmd/govulncheck@v$(GOVULNCHECK_VERSION); }
 
 #deps-act: @ Install act for running GitHub Actions locally
 deps-act: deps
-	@command -v act >/dev/null 2>&1 || { echo "Installing act $(ACT_VERSION)..."; \
-		curl -sSfL https://raw.githubusercontent.com/nektos/act/v$(ACT_VERSION)/install.sh | sudo bash -s -- -b /usr/local/bin v$(ACT_VERSION); \
+	@command -v act >/dev/null 2>&1 || { echo "Installing act v$(ACT_VERSION)..."; \
+		mkdir -p $$HOME/.local/bin; \
+		curl -sSfL https://raw.githubusercontent.com/nektos/act/v$(ACT_VERSION)/install.sh | \
+			bash -s -- -b $$HOME/.local/bin v$(ACT_VERSION); \
+	}
+
+#deps-hadolint: @ Install hadolint for Dockerfile linting
+deps-hadolint:
+	@command -v hadolint >/dev/null 2>&1 || { echo "Installing hadolint v$(HADOLINT_VERSION)..."; \
+		mkdir -p $$HOME/.local/bin; \
+		curl -sSfL -o $$HOME/.local/bin/hadolint "https://github.com/hadolint/hadolint/releases/download/v$(HADOLINT_VERSION)/hadolint-Linux-x86_64"; \
+		chmod +x $$HOME/.local/bin/hadolint; \
+	}
+
+#deps-gitleaks: @ Install gitleaks for secret scanning
+deps-gitleaks:
+	@command -v gitleaks >/dev/null 2>&1 || { echo "Installing gitleaks v$(GITLEAKS_VERSION)..."; \
+		mkdir -p $$HOME/.local/bin; \
+		curl -sSfL -o /tmp/gitleaks.tar.gz "https://github.com/zricethezav/gitleaks/releases/download/v$(GITLEAKS_VERSION)/gitleaks_$(GITLEAKS_VERSION)_linux_x64.tar.gz"; \
+		tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks; \
+		install -m 755 /tmp/gitleaks $$HOME/.local/bin/gitleaks; \
+		rm -f /tmp/gitleaks.tar.gz /tmp/gitleaks; \
+	}
+
+#deps-actionlint: @ Install actionlint for GitHub Actions workflow linting
+deps-actionlint:
+	@command -v actionlint >/dev/null 2>&1 || { echo "Installing actionlint v$(ACTIONLINT_VERSION)..."; \
+		mkdir -p $$HOME/.local/bin; \
+		curl -sSfL -o /tmp/actionlint.tar.gz "https://github.com/rhysd/actionlint/releases/download/v$(ACTIONLINT_VERSION)/actionlint_$(ACTIONLINT_VERSION)_linux_amd64.tar.gz"; \
+		tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint; \
+		install -m 755 /tmp/actionlint $$HOME/.local/bin/actionlint; \
+		rm -f /tmp/actionlint.tar.gz /tmp/actionlint; \
+	}
+
+#deps-shellcheck: @ Install shellcheck (used by actionlint for workflow run-step linting)
+deps-shellcheck:
+	@command -v shellcheck >/dev/null 2>&1 || { echo "Installing shellcheck v$(SHELLCHECK_VERSION)..."; \
+		mkdir -p $$HOME/.local/bin; \
+		curl -sSfL -o /tmp/shellcheck.tar.xz "https://github.com/koalaman/shellcheck/releases/download/v$(SHELLCHECK_VERSION)/shellcheck-v$(SHELLCHECK_VERSION).linux.x86_64.tar.xz"; \
+		tar -xJf /tmp/shellcheck.tar.xz -C /tmp; \
+		install -m 755 /tmp/shellcheck-v$(SHELLCHECK_VERSION)/shellcheck $$HOME/.local/bin/shellcheck; \
+		rm -rf /tmp/shellcheck.tar.xz /tmp/shellcheck-v$(SHELLCHECK_VERSION); \
+	}
+
+#deps-trivy: @ Install Trivy for CVE / secret / misconfiguration scanning
+deps-trivy:
+	@command -v trivy >/dev/null 2>&1 || { echo "Installing trivy v$(TRIVY_VERSION)..."; \
+		mkdir -p $$HOME/.local/bin; \
+		curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | \
+			sh -s -- -b $$HOME/.local/bin v$(TRIVY_VERSION); \
 	}
 
 #deps-check: @ Show Go version and mise tool status
@@ -102,34 +163,92 @@ deps-prune:
 	@echo "=== Dependency Pruning ==="
 	@if [ -f go.mod ]; then \
 		echo "--- Go: running go mod tidy ---"; \
-		$(call go-exec,go mod tidy); \
+		go mod tidy; \
 	fi
 	@echo "=== Pruning complete ==="
 
 #deps-prune-check: @ Verify no prunable dependencies (CI gate)
 deps-prune-check:
-	@FOUND=0; \
-	if [ -f go.mod ]; then \
-		$(call go-exec,go mod tidy); \
+	@if [ -f go.mod ]; then \
+		go mod tidy; \
 		if ! git diff --exit-code go.mod go.sum >/dev/null 2>&1; then \
-			echo "ERROR: go.mod/go.sum not tidy. Run 'go mod tidy'."; FOUND=1; git checkout go.mod go.sum; \
+			echo "ERROR: go.mod/go.sum not tidy. Run 'go mod tidy' and stage the changes:"; \
+			git diff --name-status go.mod go.sum; \
+			exit 1; \
 		fi; \
-	fi; \
-	if [ $$FOUND -ne 0 ]; then exit 1; fi; \
-	echo "No prunable dependencies found."
+	fi
+	@echo "No prunable dependencies found."
+
+# =============================================================================
+# clean, build, run, test, format
+# =============================================================================
 
 #clean: @ Remove build artifacts
 clean:
 	@rm -f ./cmd/inventory/main ./cmd/products/products
 	@echo "Build artifacts removed."
 
-#static-check: @ Composite quality gate (lint + sec + mermaid-lint + diagrams-check + deps-prune-check)
-static-check: deps lint sec diagrams-check deps-prune-check
-	@echo "Static check passed."
+#format: @ Auto-format Go source (gofmt + goimports via golangci-lint --fix)
+format: deps
+	@golangci-lint run --fix ./... 2>/dev/null || true
+	@gofmt -w .
 
-#lint: @ Run golangci-lint + mermaid-lint
-lint: deps mermaid-lint
-	@$(call go-exec,golangci-lint run ./...)
+#build: @ Build inventory and products binaries
+build: deps
+	@export GOFLAGS=$(GOFLAGS) CGO_ENABLED=0 GOOS=linux GOARCH=amd64 && \
+		go build -a -o ./cmd/inventory/main ./cmd/inventory/main.go
+	@export GOFLAGS=$(GOFLAGS) CGO_ENABLED=0 GOOS=linux GOARCH=amd64 && \
+		go build -a -o ./cmd/products/products ./cmd/products/main.go
+
+#run: @ Run inventory service with Dapr (default: SDK HTTP mode)
+run: deps
+	@dapr run --app-id inventory --config ./config.yaml --resources-path ./components --app-protocol http --app-port 3002 --dapr-http-port 3500 -- go run cmd/inventory/main.go
+
+#test: @ Run unit tests (fast, no external deps)
+test: deps
+	@export GOFLAGS=$(GOFLAGS) && go test -race -v ./...
+
+#integration-test: @ Run integration tests (real PostgreSQL + Dapr-state stub + gRPC server)
+integration-test: deps
+	@command -v docker >/dev/null 2>&1 || { echo "ERROR: docker is required for integration-test"; exit 1; }
+	@export GOFLAGS=$(GOFLAGS) && go test -race -tags=integration -v ./...
+
+#update: @ Update dependencies to latest versions
+update: deps
+	@export GOFLAGS=$(GOFLAGS) && go get -u ./... && go mod tidy
+
+# =============================================================================
+# lint / sec / vulncheck / secrets / trivy / lint-ci / mermaid-lint
+# Composed into `static-check` below.
+# =============================================================================
+
+#lint: @ Run golangci-lint (includes gocritic, gosec via .golangci.yml)
+lint: deps
+	@golangci-lint run ./...
+
+#sec: @ Run gosec security scanner
+sec: deps
+	@gosec -exclude-dir=proto ./...
+
+#vulncheck: @ Check for known vulnerabilities in dependencies (govulncheck)
+vulncheck: deps
+	@govulncheck ./...
+
+#secrets: @ Scan for hardcoded secrets (gitleaks)
+secrets: deps-gitleaks
+	@gitleaks detect --source . --verbose --redact --no-banner
+
+#trivy-fs: @ Scan filesystem for vulnerabilities, secrets, and misconfigurations
+trivy-fs: deps-trivy
+	@trivy fs --scanners vuln,secret,misconfig --severity CRITICAL,HIGH --exit-code 1 .
+
+#trivy-config: @ Scan K8s manifests for security misconfigurations (KSV-*)
+trivy-config: deps-trivy
+	@trivy config --severity CRITICAL,HIGH --exit-code 1 k8s/
+
+#lint-ci: @ Lint GitHub Actions workflows (actionlint + shellcheck)
+lint-ci: deps-actionlint deps-shellcheck
+	@actionlint
 
 #mermaid-lint: @ Validate Mermaid diagrams in markdown files (Docker-based, portable)
 mermaid-lint:
@@ -190,40 +309,29 @@ diagrams-check:
 		exit 1; \
 	}
 
-#sec: @ Run gosec security scanner
-sec: deps
-	@$(call go-exec,gosec -exclude-dir=proto ./...)
+#static-check: @ Composite quality gate (lint-ci + lint + sec + vulncheck + secrets + trivy-fs + trivy-config + mermaid-lint + diagrams-check + deps-prune-check)
+static-check: deps lint-ci lint sec vulncheck secrets trivy-fs trivy-config mermaid-lint diagrams-check deps-prune-check
+	@echo "Static check passed."
 
-#test: @ Run unit tests (fast, no external deps)
-test: deps
-	@$(call go-exec,export GOFLAGS=$(GOFLAGS) && go test -race -v ./...)
+# =============================================================================
+# CI orchestration
+# =============================================================================
 
-#integration-test: @ Run integration tests (real PostgreSQL via Testcontainers)
-integration-test: deps
-	@command -v docker >/dev/null 2>&1 || { echo "ERROR: docker is required for integration-test"; exit 1; }
-	@$(call go-exec,export GOFLAGS=$(GOFLAGS) && go test -race -tags=integration -v ./...)
-
-#build: @ Build inventory and products binaries
-build: deps
-	@$(call go-exec,export GOFLAGS=$(GOFLAGS) CGO_ENABLED=0 GOOS=linux GOARCH=amd64 && go build -a -o ./cmd/inventory/main ./cmd/inventory/main.go)
-	@$(call go-exec,export GOFLAGS=$(GOFLAGS) CGO_ENABLED=0 GOOS=linux GOARCH=amd64 && go build -a -o ./cmd/products/products ./cmd/products/main.go)
-
-#run: @ Run inventory service with Dapr (default: SDK HTTP mode)
-run: deps
-	@dapr run --app-id inventory --config ./config.yaml --resources-path ./components --app-protocol http --app-port 3002 --dapr-http-port 3500 -- go run cmd/inventory/main.go
-
-#update: @ Update dependencies to latest versions
-update: deps
-	@$(call go-exec,export GOFLAGS=$(GOFLAGS) && go get -u ./... && go mod tidy)
-
-#ci: @ Run full local CI pipeline
-ci: deps static-check test integration-test build
+#ci: @ Run full local CI pipeline (format → static-check → test → integration-test → build)
+ci: deps format static-check test integration-test build
 	@echo "Local CI pipeline passed."
 
-#ci-run: @ Run GitHub Actions workflow locally using act
+#ci-run: @ Run GitHub Actions workflow locally using act (jobs serialized, isolated artifact server)
 ci-run: deps-act
-	@act push --container-architecture linux/amd64 \
-		--artifact-server-path /tmp/act-artifacts
+	@docker container prune -f 2>/dev/null || true
+	@ACT_PORT=$$(shuf -i 40000-59999 -n 1); \
+	ARTIFACT_PATH=$$(mktemp -d -t act-artifacts.XXXXXX); \
+	for j in docker-lint static-check build test integration-test; do \
+		echo "==== act push --job $$j ===="; \
+		act push --job $$j --container-architecture linux/amd64 \
+			--artifact-server-port "$$ACT_PORT" \
+			--artifact-server-path "$$ARTIFACT_PATH" || exit 1; \
+	done
 
 #release: @ Create and push a new tag
 release: build
@@ -236,6 +344,10 @@ release: build
 		git push origin $$newtag && \
 		git push && \
 		echo "Done."'
+
+# =============================================================================
+# Run modes (local Dapr client comparison)
+# =============================================================================
 
 #dapr-test: @ Run inventory with Dapr sidecar only (no app)
 dapr-test:
@@ -294,7 +406,9 @@ get-thingamajig:
 #get-all: @ Fetch all three items from REST API
 get-all: get-widget get-gadget get-thingamajig
 
-# === Renovate ===
+# =============================================================================
+# Renovate
+# =============================================================================
 
 #renovate-bootstrap: @ Install Node via mise (version pinned in .mise.toml) for Renovate
 renovate-bootstrap:
@@ -308,9 +422,13 @@ renovate-bootstrap:
 renovate-validate: renovate-bootstrap
 	@npx --yes renovate --platform=local
 
+# =============================================================================
+# Code generation
+# =============================================================================
+
 #generate-env: @ Regenerate .env from pkg/config defaults
 generate-env:
-	@$(call go-exec,go run ./cmd/generate-env)
+	@go run ./cmd/generate-env
 
 #proto-gen: @ Regenerate gRPC code from .proto files (uses mise-pinned tool versions)
 proto-gen: deps
@@ -322,7 +440,9 @@ proto-gen: deps
 			proto/products/products.proto
 	@echo "Protobuf code regenerated."
 
-# === Docker ===
+# =============================================================================
+# Docker
+# =============================================================================
 
 #docker-build: @ Build container images for both services
 docker-build:
@@ -338,36 +458,64 @@ docker-push:
 docker-lint: deps-hadolint
 	@hadolint Dockerfile.inventory Dockerfile.products
 
-#deps-hadolint: @ Install hadolint for Dockerfile linting
-deps-hadolint:
-	@command -v hadolint >/dev/null 2>&1 || { echo "Installing hadolint v$(HADOLINT_VERSION)..."; \
-		curl -sSfL -o /tmp/hadolint "https://github.com/hadolint/hadolint/releases/download/v$(HADOLINT_VERSION)/hadolint-Linux-x86_64"; \
-		chmod +x /tmp/hadolint && sudo mv /tmp/hadolint /usr/local/bin/hadolint; }
+# =============================================================================
+# KinD + Kubernetes
+# =============================================================================
+#
+# Naming convention (matches /makefile skill kind-up/down alias convention):
+#
+#   kind-create     — create cluster + install LoadBalancer controller + install Dapr
+#   kind-deploy     — kind-create + k8s-deploy (full stack up)
+#   kind-destroy    — delete cluster + stop cloud-provider-kind container
+#
+#   kind-up         — alias for kind-deploy (docker-compose-style "bring up the stack")
+#   kind-down       — alias for kind-destroy (docker-compose-style "tear it down")
+#   e2e-setup       — alias for kind-deploy (CI compatibility)
+#   e2e-teardown    — alias for kind-destroy (CI compatibility)
+#
+# LoadBalancer: cloud-provider-kind (kind-team maintained) — replaces MetalLB.
+# Runs as a host-side controller (watches Services of type LoadBalancer on the
+# 'kind' Docker network and allocates IPs). No in-cluster install, no
+# IPAddressPool / L2Advertisement CRDs, no MetalLB release-track drift.
 
-# === KinD + K8s ===
-
-#kind-up: @ Create KinD cluster with MetalLB and Dapr
-kind-up:
+#kind-create: @ Create local KinD cluster with cloud-provider-kind LoadBalancer controller + Dapr
+kind-create:
 	@command -v kind >/dev/null 2>&1 || { echo "Error: kind not installed. Run: go install sigs.k8s.io/kind@v$(KIND_VERSION)"; exit 1; }
 	@command -v kubectl >/dev/null 2>&1 || { echo "Error: kubectl not installed. See: https://kubernetes.io/docs/tasks/tools/"; exit 1; }
-	@kind create cluster --config=kind-config.yaml --name $(CLUSTER_NAME) \
-		--image=kindest/node:$(KIND_NODE_IMAGE) --wait 60s 2>/dev/null || true
-	@echo "=== Installing MetalLB ==="
-	@kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v$(METALLB_VERSION)/config/manifests/metallb-native.yaml
-	@kubectl rollout status deployment/controller -n metallb-system --timeout=180s
-	@kubectl rollout status daemonset/speaker -n metallb-system --timeout=180s
-	@ip_sub=$$(docker network inspect kind -f '{{index .IPAM.Config 0 "Subnet"}}' | awk -F. '{printf "%d.%d\n", $$1, $$2}'); \
-		sed "s/METALLB_IP_SUB/$$ip_sub/g" k8s/metallb-config.yaml | kubectl apply -f -
-	@echo "=== Installing Dapr ==="
 	@command -v dapr >/dev/null 2>&1 || { echo "Error: dapr CLI not installed. See https://docs.dapr.io/getting-started/install-dapr-cli/"; exit 1; }
+	@if kind get clusters 2>/dev/null | grep -q "^$(CLUSTER_NAME)$$"; then \
+		echo "KinD cluster '$(CLUSTER_NAME)' already exists — switching context..."; \
+		kubectl config use-context kind-$(CLUSTER_NAME); \
+	else \
+		kind create cluster --config=kind-config.yaml --name $(CLUSTER_NAME) \
+			--image=kindest/node:$(KIND_NODE_IMAGE) --wait 60s; \
+	fi
+	@echo "=== Installing cloud-provider-kind (host-side LoadBalancer controller) ==="
+	@docker rm -f cloud-provider-kind >/dev/null 2>&1 || true
+	@docker run --rm -d \
+		--name cloud-provider-kind \
+		--network kind \
+		-v /var/run/docker.sock:/var/run/docker.sock \
+		registry.k8s.io/cloud-provider-kind/cloud-controller-manager:v$(CLOUD_PROVIDER_KIND_VERSION) >/dev/null
+	@echo "=== Installing Dapr (runtime v$(DAPR_RUNTIME_VERSION)) ==="
 	@dapr init -k --runtime-version $(DAPR_RUNTIME_VERSION) --wait --timeout 300 2>/dev/null || true
 	@echo "=== Installing Dapr Dashboard ==="
 	@dapr dashboard -k -p 0 2>/dev/null &
 	@echo "=== KinD cluster ready ==="
 
-#kind-down: @ Destroy KinD cluster
-kind-down:
+#kind-destroy: @ Delete KinD cluster and stop cloud-provider-kind
+kind-destroy:
+	@docker rm -f cloud-provider-kind 2>/dev/null || true
 	@kind delete cluster --name $(CLUSTER_NAME) 2>/dev/null || true
+
+#kind-deploy: @ Create cluster, build/load images, apply manifests (full stack up)
+kind-deploy: kind-create k8s-deploy
+
+#kind-up: @ Bring the whole stack up — alias for kind-deploy (docker-compose-style)
+kind-up: kind-deploy
+
+#kind-down: @ Tear the whole stack down — alias for kind-destroy (docker-compose-style)
+kind-down: kind-destroy
 
 #k8s-deploy: @ Build images, load into KinD, and deploy all manifests
 k8s-deploy: docker-build
@@ -412,7 +560,9 @@ k8s-status:
 	@echo "=== Products ($(NS_PRODUCTS)) ==="
 	@kubectl get pods,svc -n $(NS_PRODUCTS) 2>/dev/null || true
 
-# === E2E ===
+# =============================================================================
+# E2E
+# =============================================================================
 
 #e2e: @ Run end-to-end tests against running K8s cluster (default: sdk-http mode)
 e2e:
@@ -422,20 +572,24 @@ e2e:
 e2e-all:
 	@./tests/e2e.sh all
 
-#e2e-setup: @ Full setup: create cluster + deploy everything
-e2e-setup: kind-up k8s-deploy
+#e2e-setup: @ Alias for kind-deploy (create cluster + deploy everything)
+e2e-setup: kind-deploy
 
-#e2e-teardown: @ Full teardown: undeploy + destroy cluster
-e2e-teardown: k8s-undeploy kind-down
+#e2e-teardown: @ Alias for kind-destroy with prior k8s-undeploy (full teardown)
+e2e-teardown: k8s-undeploy kind-destroy
 
-.PHONY: help deps deps-act deps-check deps-prune deps-prune-check \
-	clean static-check lint sec test integration-test build run update ci ci-run release \
+.PHONY: help \
+	deps deps-act deps-hadolint deps-gitleaks deps-actionlint deps-shellcheck deps-trivy deps-check deps-prune deps-prune-check \
+	clean format build run test integration-test update \
+	lint sec vulncheck secrets trivy-fs trivy-config lint-ci mermaid-lint \
+	diagrams diagrams-clean diagrams-check \
+	static-check ci ci-run release \
 	dapr-test run-custom-http run-custom-grpc run-sdk-http run-sdk-grpc run-products \
 	send-widget send-gadget send-thingamajig send-all \
 	get-widget get-gadget get-thingamajig get-all \
 	renovate-bootstrap renovate-validate \
 	generate-env proto-gen \
-	docker-build docker-push docker-lint deps-hadolint \
-	kind-up kind-down k8s-deploy k8s-undeploy k8s-status \
-	e2e e2e-all e2e-setup e2e-teardown \
-	mermaid-lint diagrams diagrams-clean diagrams-check
+	docker-build docker-push docker-lint \
+	kind-create kind-destroy kind-deploy kind-up kind-down \
+	k8s-deploy k8s-undeploy k8s-status \
+	e2e e2e-all e2e-setup e2e-teardown

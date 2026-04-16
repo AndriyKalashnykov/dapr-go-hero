@@ -5,7 +5,7 @@
 
 # dapr-go-hero
 
-Reference implementation of a Go microservice platform on [Dapr](https://dapr.io), comparing three client approaches (custom HTTP, custom gRPC, Dapr Go SDK) across four Dapr building blocks: Pub/Sub with content-based routing, State Store, Secret Store, and Service Invocation. Production-ready K8s deployment with KinD + MetalLB for local parity, Testcontainers-backed integration tests, and a CI pipeline that provisions a full Dapr cluster on every PR.
+Reference implementation of a Go microservice platform on [Dapr](https://dapr.io), comparing three client approaches (custom HTTP, custom gRPC, Dapr Go SDK) across four Dapr building blocks: Pub/Sub with content-based routing, State Store, Secret Store, and Service Invocation. Production-ready K8s deployment with KinD + cloud-provider-kind for local parity, Testcontainers-backed integration tests, and a CI pipeline that provisions a full Dapr cluster on every PR.
 
 <p align="center"><img src="docs/diagrams/out/c4-context.png" alt="C4 System Context: dapr-go-hero fans CloudEvents to Redis, PostgreSQL, Zipkin, and the Kubernetes Secret API" width="720"></p>
 
@@ -22,7 +22,7 @@ Reference implementation of a Go microservice platform on [Dapr](https://dapr.io
 | Event backbone | Redis Streams (pub/sub) + Redis (state) | Dapr's default low-ceremony broker; swap-in any supported backend via component YAML |
 | RPC | gRPC + Protobuf | Strongly-typed inter-service contracts, HTTP/2 multiplexing, native tracing headers |
 | Container | Alpine + BuildKit cache mounts | ~12–21 MB images; `go mod download` cached across builds |
-| Orchestration | Kubernetes + KinD + MetalLB (L2) | LoadBalancer Service support in KinD — closes the parity gap with cloud K8s |
+| Orchestration | Kubernetes + KinD + cloud-provider-kind | LoadBalancer Service support in KinD via the kind-team-maintained host-side controller — closes the parity gap with cloud K8s |
 | Observability | Zipkin via Dapr sidecar | Zero-code distributed tracing; Dapr propagates W3C Trace Context across hops |
 | Secrets | `secretstores.kubernetes` (K8s-native) | RBAC-scoped; no external Vault dependency |
 | Resiliency | Dapr `Resiliency` CRD | Declarative retries, timeouts, circuit breakers per target app/component |
@@ -43,14 +43,14 @@ Reference implementation of a Go microservice platform on [Dapr](https://dapr.io
 
 Two delivery modes. Kubernetes (Option A) is closest to production; local dev (Option B) iterates faster on single-binary changes.
 
-### Option A — Kubernetes (KinD + MetalLB + Dapr)
+### Option A — Kubernetes (KinD + cloud-provider-kind + Dapr)
 
 ```bash
-make e2e-setup     # create KinD cluster, install MetalLB + Dapr + Dashboard, deploy stack
+make kind-up       # create KinD cluster, install cloud-provider-kind + Dapr + Dashboard, deploy stack
 make e2e           # run 11 end-to-end assertions against the deployed cluster (sdk-http mode)
 make e2e-all       # run all 11 assertions across all 4 client modes (sdk-http, sdk-grpc, custom-http, custom-grpc)
 make k8s-status    # show pods/services across all namespaces
-make e2e-teardown  # destroy everything
+make kind-down     # destroy everything
 ```
 
 Access deployed services via `kubectl port-forward`:
@@ -154,7 +154,7 @@ Dapr pub/sub callbacks (e.g., `/widgets.v1`) are delivery mechanics, not a publi
 
 - **Unit** (`_test.go`): pure logic, mocked interfaces, millisecond execution. Run in CI on every push.
 - **Integration** (`//go:build integration`): widgets repo against real PostgreSQL via Testcontainers-go; gadgets repo against a stub Dapr state sidecar (httptest); products repo against a real gRPC server on an ephemeral port; `pkg/dapr/client_http` against a stub sidecar. Catches schema drift, wire-format drift, and SQL injection regressions. Run in CI on every push.
-- **E2E** (`tests/e2e.sh`): KinD cluster + MetalLB + Dapr + full manifest deploy. Verifies sidecar injection, pub/sub routing, cross-namespace service invocation, and Zipkin trace propagation. Run in CI on every push (~3–5 min).
+- **E2E** (`tests/e2e.sh`): KinD cluster + cloud-provider-kind + Dapr + full manifest deploy. Verifies sidecar injection, pub/sub routing, cross-namespace service invocation, and Zipkin trace propagation. Run in CI on every push (~3–5 min).
 
 Gadget and Products repositories are covered by mock-based unit tests plus real E2E — adding a third integration layer for those would duplicate what E2E already validates.
 
@@ -195,8 +195,8 @@ graph TB
   end
 
   subgraph Cluster["KinD cluster"]
-    subgraph MetalLB["metallb-system"]
-      ML[MetalLB L2]
+    subgraph LB["Host-side"]
+      ML[cloud-provider-kind<br/>LoadBalancer controller]
     end
 
     subgraph DaprSystem["dapr-system"]
@@ -321,15 +321,15 @@ Multi-stage Alpine with BuildKit cache mounts. Post-initial build, `make docker-
 
 ### Local Cluster Composition
 
-`make kind-up` provisions:
+`make kind-up` (alias for `kind-deploy`) brings up the full stack; `make kind-create` just provisions the cluster:
 
-- **MetalLB** (L2 mode) — enables LoadBalancer Services in KinD by announcing IPs over the Docker bridge network
-- **Dapr runtime** via `dapr init -k` — Operator, Sentry, Placement, Scheduler, Sidecar Injector
+- **cloud-provider-kind** — kind-team-maintained host-side controller that watches `Service` objects of type `LoadBalancer` and allocates IPs on the `kind` Docker network. Replaces MetalLB: no in-cluster DaemonSet, no IPAddressPool/L2Advertisement CRDs, works across all supported `kindest/node` versions without release-track drift.
+- **Dapr runtime** via `dapr init -k --runtime-version $(DAPR_RUNTIME_VERSION)` — Operator, Sentry, Placement, Scheduler, Sidecar Injector, pinned to the same version CI uses
 - **Dapr Dashboard** — cluster inspection UI
 
 ## Local dev setup
 
-See [Quick Start → Option A](#option-a--kubernetes-kind--metallb--dapr) for the Kubernetes flow. For standalone binaries:
+See [Quick Start → Option A](#option-a--kubernetes-kind--cloud-provider-kind--dapr) for the Kubernetes flow. For standalone binaries:
 
 ```bash
 docker run --name postgres -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres:16
@@ -413,8 +413,11 @@ Run `make help` for the full list.
 | `make docker-build` | Build both images (BuildKit + cache mounts) |
 | `make docker-push` | Push to `$(REGISTRY)` |
 | `make docker-lint` | Hadolint on Dockerfiles |
-| `make kind-up` | Create KinD cluster + MetalLB + Dapr + Dashboard |
-| `make kind-down` | Destroy cluster |
+| `make kind-up` | Full stack: create cluster + cloud-provider-kind + Dapr + deploy manifests (alias for `kind-deploy`) |
+| `make kind-down` | Full teardown (alias for `kind-destroy`) |
+| `make kind-create` | Create cluster + install LoadBalancer controller + Dapr (no app deploy) |
+| `make kind-deploy` | `kind-create` + `k8s-deploy` (full stack up) |
+| `make kind-destroy` | Delete cluster + stop cloud-provider-kind container |
 | `make k8s-deploy` | Build images, load into KinD, apply all manifests |
 | `make k8s-undeploy` | Remove all manifests |
 | `make k8s-status` | Pod/service status across namespaces |
@@ -448,7 +451,7 @@ GitHub Actions runs on every push to `main`, tags `v*`, pull requests, and `work
 | `build` | static-check | Compile both binaries |
 | `test` | static-check | Unit tests |
 | `integration-test` | static-check | Integration tests with Testcontainers PostgreSQL |
-| `e2e` | build, test | Provision KinD + MetalLB + Dapr, deploy, run 11 end-to-end assertions across all 4 client modes (`make e2e-all`) |
+| `e2e` | build, test | Provision KinD + cloud-provider-kind + Dapr, deploy, run 11 end-to-end assertions across all 4 client modes (`make e2e-all`) |
 | `ci-pass` | all above | Aggregate gate — single required status check for branch protection |
 
 [Renovate](https://docs.renovatebot.com/) auto-merges minor/patch updates after CI passes (3-day minimum release age on majors). A single `customManagers` regex in `renovate.json` tracks every `# renovate:` annotated constant in the Makefile — no per-tool configuration.
