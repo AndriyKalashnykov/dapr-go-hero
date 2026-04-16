@@ -17,7 +17,8 @@ spec:
     spec:
       containers:
         - name: redis
-          image: redis:7.4-alpine
+          # renovate: datasource=docker depName=redis
+          image: redis:8.6-alpine
           ports:
             - containerPort: 6379
           resources:
