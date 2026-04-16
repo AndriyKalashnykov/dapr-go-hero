@@ -11,8 +11,9 @@ spec:
     - name: redisPassword
       value: ""
     # At-least-once redelivery tuning — matches k8s/dapr/pubsub.yaml
+    # Tight timing so the e2e resiliency test has a deterministic SLO.
     - name: processingTimeout
-      value: "30s"
+      value: "10s"
     - name: redeliverInterval
       value: "5s"
     - name: queueDepth

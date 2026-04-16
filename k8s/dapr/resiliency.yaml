@@ -23,9 +23,17 @@ spec:
         # With Redis Streams + processingTimeout, unacked messages
         # are redelivered; this policy controls per-app retry
         # semantics on top of broker-level redelivery.
+        #
+        # Tight (cap 2s) so the resiliency e2e test has a
+        # deterministic redelivery window: even at backoff saturation,
+        # a retry fires every 2s. Combined with processingTimeout=10s
+        # + redeliverInterval=5s, redelivery SHOULD complete within
+        # ~20-30s of products becoming Ready. 90s poll budget
+        # provides ~3x headroom — a miss now indicates a real issue
+        # with the redelivery path, not transient backoff timing.
         policy: exponential
         duration: 500ms
-        maxInterval: 10s
+        maxInterval: 2s
         maxRetries: -1
       service-retry:
         policy: exponential
