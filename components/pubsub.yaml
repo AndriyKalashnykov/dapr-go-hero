@@ -17,5 +17,3 @@ spec:
       value: "5s"
     - name: queueDepth
       value: "100"
-    - name: concurrency
-      value: "parallel"
