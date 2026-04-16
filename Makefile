@@ -34,6 +34,8 @@ METALLB_VERSION       := 0.15.3
 HADOLINT_VERSION      := 2.14.0
 # renovate: datasource=docker depName=minlag/mermaid-cli
 MERMAID_CLI_VERSION   := 11.12.0
+# renovate: datasource=docker depName=plantuml/plantuml
+PLANTUML_VERSION      := 1.2026.2
 
 # === Docker / K8s Config ===
 CLUSTER_NAME   := dapr-go-hero
@@ -121,8 +123,8 @@ clean:
 	@rm -f ./cmd/inventory/main ./cmd/products/products
 	@echo "Build artifacts removed."
 
-#static-check: @ Composite quality gate (lint + sec + mermaid-lint + deps-prune-check)
-static-check: deps lint sec deps-prune-check
+#static-check: @ Composite quality gate (lint + sec + mermaid-lint + diagrams-check + deps-prune-check)
+static-check: deps lint sec diagrams-check deps-prune-check
 	@echo "Static check passed."
 
 #lint: @ Run golangci-lint + mermaid-lint
@@ -157,6 +159,36 @@ mermaid-lint:
 		echo "Mermaid lint: $$FAILED file(s) had parse errors."; \
 		exit 1; \
 	fi
+
+DIAGRAM_DIR := docs/diagrams
+DIAGRAM_SRC := $(wildcard $(DIAGRAM_DIR)/*.puml)
+DIAGRAM_OUT := $(patsubst $(DIAGRAM_DIR)/%.puml,$(DIAGRAM_DIR)/out/%.png,$(DIAGRAM_SRC))
+
+#diagrams: @ Render PlantUML architecture diagrams to PNG (pinned Docker image)
+diagrams: $(DIAGRAM_OUT)
+
+$(DIAGRAM_DIR)/out/%.png: $(DIAGRAM_DIR)/%.puml
+	@command -v docker >/dev/null 2>&1 || { echo "ERROR: docker required for PlantUML render"; exit 1; }
+	@mkdir -p $(DIAGRAM_DIR)/out
+	@docker run --rm --user "$$(id -u):$$(id -g)" \
+		-v "$(CURDIR)/$(DIAGRAM_DIR):/work" -w /work \
+		-e HOME=/tmp -e _JAVA_OPTIONS=-Duser.home=/tmp \
+		plantuml/plantuml:$(PLANTUML_VERSION) \
+		-tpng -o out $(notdir $<)
+
+#diagrams-clean: @ Remove rendered PlantUML artifacts
+diagrams-clean:
+	@rm -rf $(DIAGRAM_DIR)/out
+
+#diagrams-check: @ Verify committed diagrams match current .puml sources (CI drift gate)
+diagrams-check:
+	@if [ -z "$(DIAGRAM_SRC)" ]; then echo "No .puml sources — skipping."; exit 0; fi
+	@$(MAKE) --no-print-directory diagrams
+	@git diff --exit-code -- $(DIAGRAM_DIR)/out >/dev/null 2>&1 || { \
+		echo "ERROR: PlantUML source changed but rendered PNG not updated. Run 'make diagrams' and commit."; \
+		git checkout -- $(DIAGRAM_DIR)/out 2>/dev/null || true; \
+		exit 1; \
+	}
 
 #sec: @ Run gosec security scanner
 sec: deps
@@ -406,4 +438,4 @@ e2e-teardown: k8s-undeploy kind-down
 	docker-build docker-push docker-lint deps-hadolint \
 	kind-up kind-down k8s-deploy k8s-undeploy k8s-status \
 	e2e e2e-all e2e-setup e2e-teardown \
-	mermaid-lint
+	mermaid-lint diagrams diagrams-clean diagrams-check

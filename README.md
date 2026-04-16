@@ -160,7 +160,16 @@ Gadget and Products repositories are covered by mock-based unit tests plus real 
 
 Each CloudEvent arrives on the `inventory` topic. Dapr's content-based routing selects one of three handlers based on `event.type`:
 
-![Demo diagram](demo.png)
+<p align="center"><img src="docs/diagrams/out/c4-container.png" alt="C4 Container view: dapr-go-hero topology across three K8s namespaces with Dapr sidecars, routing, and Zipkin tracing" width="800"></p>
+
+Source: [`docs/diagrams/c4-container.puml`](docs/diagrams/c4-container.puml) · regenerate with `make diagrams`.
+
+**Cross-cutting concerns visible above:**
+
+- **Resiliency** (`k8s/dapr/resiliency.yaml`): service invocation to products uses exponential retry (3×, 200ms→10s) guarded by a circuit breaker (trips after 5 consecutive failures, 10s cool-down). State writes retry 3× (exponential 100ms→5s). Pub/Sub has both an outbound publish-retry policy and an inbound subscriber-handler retry (unlimited exponential) so events redeliver after downstream recovery. Redis Streams' `processingTimeout=30s` + `redeliverInterval=5s` provide the broker-level at-least-once guarantee underneath.
+- **Tracing** (`k8s/dapr/configuration.yaml` tracing block): both sidecars sample 100% and ship W3C Trace Context spans to Zipkin. Inventory → products invocation and every Redis/PostgreSQL hop appear as a single connected trace; `tests/e2e.sh` asserts spans exist for both `inventory` and `products` app-IDs after each run.
+- **Access control** (products namespace `configuration.yaml`): `defaultAction: deny` with `inventory` in the allowlist. Any other app-ID calling the products sidecar is rejected at the sidecar boundary before reaching the app; mTLS between sidecars (`mtls.enabled: true`) authenticates the caller's identity.
+- **Subscription registration** (dual-mode): K8s `Subscription` CRD (`k8s/dapr/subscription.yaml`) declares the topic and route rules declaratively; in parallel, each feature package also registers programmatically via the app's `/dapr/subscribe` endpoint, with `pkg/dapr/subscription.go` merging all per-feature subscriptions into one response. Either path alone is functional; both are present so the example exercises the full API surface.
 
 | event.type | Route | Storage backend | Dapr building block |
 |-----------|-------|-----------------|---------------------|

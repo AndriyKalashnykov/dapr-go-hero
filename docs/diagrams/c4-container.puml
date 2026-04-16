@@ -1,0 +1,63 @@
+@startuml c4-container
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/v2.11.0/C4_Container.puml
+
+' Modern flat styling: no shadows, sharper corners, clean sans-serif, modern palette.
+skinparam backgroundColor #FAFAFA
+skinparam shadowing false
+skinparam roundCorner 4
+skinparam defaultFontName "Inter, Helvetica, Arial, sans-serif"
+skinparam defaultFontSize 13
+skinparam ArrowColor #37474F
+skinparam ArrowThickness 1.2
+skinparam rectangleBorderThickness 1.3
+
+UpdateElementStyle("person",         $fontColor="#FFFFFF", $bgColor="#0F766E", $borderColor="#134E4A")
+UpdateElementStyle("container",      $fontColor="#FFFFFF", $bgColor="#2563EB", $borderColor="#1E3A8A")
+UpdateElementStyle("container_db",   $fontColor="#FFFFFF", $bgColor="#7C3AED", $borderColor="#4C1D95")
+UpdateElementStyle("container_queue",$fontColor="#FFFFFF", $bgColor="#DB2777", $borderColor="#831843")
+UpdateElementStyle("system_ext",     $fontColor="#1E293B", $bgColor="#CBD5E1", $borderColor="#64748B")
+UpdateBoundaryStyle($bgColor="#F1F5F9", $borderColor="#94A3B8", $fontColor="#1E293B")
+
+title Container View — dapr-go-hero
+
+Person(publisher, "Event Publisher", "External system / test harness publishing CloudEvents")
+
+System_Boundary(inv_ns, "Namespace: dapr-go-hero-inventory") {
+  Container(inventory, "Inventory Service", "Go 1.26, Fiber v3", "Public REST API (:3000); Dapr event handlers; content-routed by event.type")
+  Container(inv_dapr, "Dapr Sidecar", "Dapr 1.17.4", "pub/sub, state store, secret store, service invocation; resiliency (retry/timeout/CB); mTLS; tracing")
+}
+
+System_Boundary(prod_ns, "Namespace: dapr-go-hero-products") {
+  Container(products, "Products Service", "Go 1.26, gRPC", "In-memory product store (:50151)")
+  Container(prod_dapr, "Dapr Sidecar", "Dapr 1.17.4", "access control: defaultAction=deny; allowlist = inventory only")
+}
+
+System_Boundary(infra_ns, "Namespace: dapr-go-hero (infra)") {
+  ContainerQueue(redis, "Redis", "redis:8.6-alpine", "Streams-backed pub/sub topic 'inventory' (at-least-once) + gadget state store")
+  ContainerDb(postgres, "PostgreSQL", "postgres:18-alpine", "widgets table; credentials via Dapr secret store")
+  Container(zipkin, "Zipkin", "openzipkin/zipkin-slim:3.6.1", "Distributed tracing; spans from both sidecars")
+}
+
+System_Ext(k8s_secret, "Kubernetes Secret", "K8s API", "postgres/* — read via Dapr secret store")
+
+Rel(publisher, inv_dapr, "POST /v1.0/publish/pubsub/inventory", "HTTPS, CloudEvents v1.0")
+Rel(inv_dapr, redis, "XADD → 'inventory' stream")
+Rel(redis, inv_dapr, "XREADGROUP (redeliver after 30s)")
+Rel(inv_dapr, inventory, "Deliver event — routed by event.type")
+
+Rel(inventory, inv_dapr, "widget.v1 → GetSecret(postgres)")
+Rel(inv_dapr, k8s_secret, "Read secret")
+Rel(inventory, postgres, "pgx: UPSERT widget")
+
+Rel(inventory, inv_dapr, "gadget.v1 → SaveState(gadget)")
+Rel(inv_dapr, redis, "SET gadget:{id}")
+
+Rel(inventory, inv_dapr, "thingamajig.v1 → InvokeMethod(products)")
+Rel(inv_dapr, prod_dapr, "gRPC over mTLS; retry 3× + CB", "gRPC, mTLS")
+Rel(prod_dapr, products, "SaveProduct / GetProduct")
+
+Rel(inv_dapr, zipkin, "spans")
+Rel(prod_dapr, zipkin, "spans")
+
+SHOW_LEGEND()
+@enduml
