@@ -13,10 +13,10 @@ spec:
       value: ""
     # At-least-once redelivery tuning (Redis Streams, consumer groups).
     # processingTimeout: how long a claimed message may be held before
-    # Dapr assumes the subscriber died and re-delivers via XPENDING.
-    # Tight (10s) so the e2e resiliency test has a deterministic SLO —
-    # a miss within the 90s poll window is a real regression, not timing
-    # noise. Raise for production workloads with longer handler runtimes.
+    # Dapr XCLAIMs it back from the consumer-group PEL. This governs
+    # *consumer-death* redelivery only — handler-error NACKs are ACKed
+    # by the sidecar in Dapr 1.17 pubsub.redis v1. For production
+    # workloads with longer legitimate handler runtimes, raise this.
     - name: processingTimeout
       value: "10s"
     # redeliverInterval: frequency of scanning pending entries for

@@ -19,18 +19,12 @@ spec:
         duration: 1s
         maxRetries: 5
       pubsub-inbound-retry:
-        # Applied when the subscriber handler returns an error.
-        # With Redis Streams + processingTimeout, unacked messages
-        # are redelivered; this policy controls per-app retry
-        # semantics on top of broker-level redelivery.
-        #
-        # Tight (cap 2s) so the resiliency e2e test has a
-        # deterministic redelivery window: even at backoff saturation,
-        # a retry fires every 2s. Combined with processingTimeout=10s
-        # + redeliverInterval=5s, redelivery SHOULD complete within
-        # ~20-30s of products becoming Ready. 90s poll budget
-        # provides ~3x headroom — a miss now indicates a real issue
-        # with the redelivery path, not transient backoff timing.
+        # Targets component-level inbound retries on pub/sub consumption.
+        # Note: in Dapr 1.17 with pubsub.redis v1, this policy does NOT
+        # retry handler-error NACKs — those are effectively ACKed by the
+        # sidecar. The policy is still declared so other brokers that
+        # respect component-level inbound retry (e.g., Kafka, RabbitMQ)
+        # pick it up if the component type is swapped.
         policy: exponential
         duration: 500ms
         maxInterval: 2s

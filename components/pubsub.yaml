@@ -10,8 +10,9 @@ spec:
       value: localhost:6379
     - name: redisPassword
       value: ""
-    # At-least-once redelivery tuning — matches k8s/dapr/pubsub.yaml
-    # Tight timing so the e2e resiliency test has a deterministic SLO.
+    # At-least-once redelivery tuning — matches k8s/dapr/pubsub.yaml.
+    # Governs consumer-death redelivery (XCLAIM via XPENDING scan); not
+    # handler-error redelivery, which Dapr pubsub.redis v1 ACKs anyway.
     - name: processingTimeout
       value: "10s"
     - name: redeliverInterval
