@@ -92,16 +92,6 @@ jobs:
       - name: Integration test
         run: make integration-test
 
-  docker-lint:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Lint Dockerfiles
-        run: make docker-lint
-
   e2e:
     needs: [build, test]
     runs-on: ubuntu-24.04
@@ -184,7 +174,7 @@ jobs:
           kubectl logs -n dapr-go-hero-products -l app=products --all-containers --tail=50 || true
 
   ci-pass:
-    needs: [static-check, docker-lint, build, test, integration-test, e2e]
+    needs: [static-check, build, test, integration-test, e2e]
     runs-on: ubuntu-24.04
     timeout-minutes: 1
     if: always()

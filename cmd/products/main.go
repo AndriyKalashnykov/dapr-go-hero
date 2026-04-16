@@ -52,7 +52,8 @@ func (s *server) SaveProduct(ctx context.Context, product *pb.Product) (*emptypb
 }
 
 func main() {
-	lis, err := net.Listen("tcp", config.ProductsAddr) // #nosec G102 -- bound to 0.0.0.0 for K8s; configurable via PRODUCTS_ADDR
+	lc := &net.ListenConfig{}
+	lis, err := lc.Listen(context.Background(), "tcp", config.ProductsAddr) // #nosec G102 -- bound to 0.0.0.0 for K8s; configurable via PRODUCTS_ADDR
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}

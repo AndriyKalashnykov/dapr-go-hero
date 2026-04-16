@@ -76,11 +76,15 @@ func TestInternal(t *testing.T) {
 	if got.Message != "failed to connect to database" {
 		t.Errorf("Message = %q, want %q", got.Message, "failed to connect to database")
 	}
-	if got.Err != cause {
+	if !errors.Is(got.Err, cause) {
 		t.Errorf("Err = %v, want %v", got.Err, cause)
 	}
-	if got.Metadata["error"] != cause {
-		t.Errorf("Metadata[error] = %v, want %v", got.Metadata["error"], cause)
+	metaErr, ok := got.Metadata["error"].(error)
+	if !ok {
+		t.Fatalf("Metadata[error] = %T, want error", got.Metadata["error"])
+	}
+	if !errors.Is(cause, metaErr) {
+		t.Errorf("Metadata[error] = %v, want %v", metaErr, cause)
 	}
 }
 
@@ -202,7 +206,7 @@ func TestError_WithMethods(t *testing.T) {
 
 	cause := errors.New("cause")
 	e = e.WithError(cause)
-	if e.Err != cause {
+	if !errors.Is(e.Err, cause) {
 		t.Errorf("WithError: Err = %v, want %v", e.Err, cause)
 	}
 }
@@ -235,7 +239,7 @@ func TestBuilder(t *testing.T) {
 		if got.Metadata["service"] != "auth" {
 			t.Errorf("Metadata = %v", got.Metadata)
 		}
-		if got.Err != cause {
+		if !errors.Is(got.Err, cause) {
 			t.Errorf("Err = %v", got.Err)
 		}
 	})

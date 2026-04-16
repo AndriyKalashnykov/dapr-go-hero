@@ -163,7 +163,7 @@ GitHub Actions CI workflow (`.github/workflows/ci.yml`) runs on every push to `m
 | **docker-lint** | — | Checkout, Hadolint on Dockerfiles |
 | **build** | static-check | Checkout, Setup Go, Build |
 | **test** | static-check | Checkout, Setup Go, Test |
-| **e2e** | build, test | KinD cluster, MetalLB, Dapr, build+load images, deploy, run e2e tests |
+| **e2e** | build, test | KinD cluster, cloud-provider-kind, Dapr, build+load images, deploy, run e2e tests across all 4 client modes |
 
 A separate cleanup workflow (`.github/workflows/cleanup-runs.yml`) removes old workflow runs weekly.
 
@@ -186,11 +186,19 @@ The Dapr cluster runtime version is pinned in the Makefile as `DAPR_RUNTIME_VERS
 
 ## Static Analysis
 
-The `make lint` composite gate runs:
-- **golangci-lint** (includes gocritic via `.golangci.yml`)
-- **mermaid-cli** (Mermaid diagram validation via `minlag/mermaid-cli` Docker image — catches broken diagrams in `README.md`, `CLAUDE.md`, `docs/*.md` before they render as red error boxes on github.com)
+`make lint` runs **golangci-lint** (gocritic, gosec, bodyclose, errorlint, goconst, misspell, noctx all configured via `.golangci.yml`).
 
-`make sec` runs **gosec** (excludes generated `proto/` dir).
+The full `make static-check` composite gate runs:
+- `make lint-ci` — actionlint + shellcheck on `.github/workflows/*.yml`
+- `make lint` — golangci-lint
+- `make sec` — standalone gosec pass (excludes generated `proto/` dir)
+- `make vulncheck` — govulncheck against `go.mod` deps
+- `make secrets` — gitleaks
+- `make trivy-fs` — filesystem vuln/secret/misconfig scan (CRITICAL, HIGH)
+- `make trivy-config` — K8s manifest misconfig scan (KSV-*)
+- `make mermaid-lint` — validates every ` ```mermaid ` block via `minlag/mermaid-cli` (same engine GitHub renders with) so broken diagrams don't ship to the README
+- `make diagrams-check` — PlantUML drift gate: `make diagrams` must produce output matching what's committed
+- `make deps-prune-check` — `go mod tidy` must produce no diff
 
 ## Code Quality Conventions
 

@@ -5,9 +5,10 @@ import (
 	"sync"
 	"testing"
 
-	pb "github.com/AndriyKalashnykov/dapr-go-hero/proto/products"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	pb "github.com/AndriyKalashnykov/dapr-go-hero/proto/products"
 )
 
 func TestNewServer(t *testing.T) {

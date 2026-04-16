@@ -1,6 +1,7 @@
 package errorz
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -32,7 +33,8 @@ func From(err error) *Error {
 	if err == nil {
 		return nil
 	}
-	if errz, ok := err.(*Error); ok {
+	errz := &Error{}
+	if errors.As(err, &errz) {
 		return errz
 	}
 	return Internal(err, "%s", err.Error())

@@ -13,7 +13,7 @@ import (
 func main() {
 	var b strings.Builder
 	b.WriteString("# Environment configuration for dapr-go-hero.\n")
-	b.WriteString("# Loaded by godotenv on startup. Existing env vars take precedence.\n")
+	b.WriteString("# Loaded at startup by pkg/config loadDotenv — existing env vars take precedence.\n")
 	b.WriteString("# Regenerate with: make generate-env\n")
 
 	group := ""
@@ -27,7 +27,7 @@ func main() {
 		b.WriteString(e.Key + "=" + e.Default + "\n")
 	}
 
-	if err := os.WriteFile(".env", []byte(b.String()), 0644); err != nil { // #nosec G306
+	if err := os.WriteFile(".env", []byte(b.String()), 0o644); err != nil { // #nosec G306
 		fmt.Fprintf(os.Stderr, "error writing .env: %v\n", err)
 		os.Exit(1)
 	}

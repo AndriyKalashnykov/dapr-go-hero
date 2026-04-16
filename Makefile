@@ -190,8 +190,8 @@ clean:
 
 #format: @ Auto-format Go source (gofmt + goimports via golangci-lint --fix)
 format: deps
-	@golangci-lint run --fix ./... 2>/dev/null || true
 	@gofmt -w .
+	@golangci-lint run --fix ./... 2>/dev/null || true
 
 #build: @ Build inventory and products binaries
 build: deps
@@ -309,8 +309,8 @@ diagrams-check:
 		exit 1; \
 	}
 
-#static-check: @ Composite quality gate (lint-ci + lint + sec + vulncheck + secrets + trivy-fs + trivy-config + mermaid-lint + diagrams-check + deps-prune-check)
-static-check: deps lint-ci lint sec vulncheck secrets trivy-fs trivy-config mermaid-lint diagrams-check deps-prune-check
+#static-check: @ Composite quality gate (lint-ci + lint + sec + vulncheck + secrets + docker-lint + trivy-fs + trivy-config + mermaid-lint + diagrams-check + deps-prune-check)
+static-check: deps lint-ci lint sec vulncheck secrets docker-lint trivy-fs trivy-config mermaid-lint diagrams-check deps-prune-check
 	@echo "Static check passed."
 
 # =============================================================================

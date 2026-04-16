@@ -15,7 +15,7 @@ Reference implementation of a Go microservice platform on [Dapr](https://dapr.io
 
 | Layer | Technology | Rationale |
 |-------|-----------|-----------|
-| Language | Go 1.26 | Static binaries, minimal runtime, strong concurrency primitives |
+| Language | Go 1.26.2 | Static binaries, minimal runtime, strong concurrency primitives |
 | Dapr runtime | v1.17.4 | Decouples building-block APIs from broker/store implementations |
 | HTTP framework | [Fiber v3](https://gofiber.io/) | Fasthttp-backed; lower allocation/request than `net/http` under load |
 | Database driver | [pgx v5](https://github.com/jackc/pgx) | Native Postgres protocol + prepared-statement pooling (no `database/sql` overhead) |
@@ -148,7 +148,7 @@ Dapr pub/sub callbacks (e.g., `/widgets.v1`) are delivery mechanics, not a publi
 
 ### Configuration surface
 
-`pkg/config/config.go` centralizes every host/port/app-id behind env vars with sensible defaults. [godotenv](https://github.com/joho/godotenv) loads `.env` on startup without overwriting process env. K8s deployments set the same keys via `env:` in the pod spec — one source of truth, two consumers.
+`pkg/config/config.go` centralizes every host/port/app-id behind env vars with sensible defaults. A small built-in `loadDotenv` helper reads `.env` on startup without overwriting existing process env vars (zero dependencies — the helper is ~20 lines in `pkg/config/config.go`). K8s deployments set the same keys via `env:` in the pod spec — one source of truth, two consumers.
 
 ### Test pyramid
 
@@ -164,7 +164,7 @@ Each CloudEvent arrives on the `inventory` topic. Dapr's content-based routing s
 
 <p align="center"><img src="docs/diagrams/out/c4-container.png" alt="C4 Container view: dapr-go-hero topology across three K8s namespaces with Dapr sidecars, routing, and Zipkin tracing" width="800"></p>
 
-Source: [`docs/diagrams/c4-container.puml`](docs/diagrams/c4-container.puml) · regenerate with `make diagrams`.
+Source: [`docs/diagrams/c4-container.puml`](docs/diagrams/c4-container.puml) · regenerate with `make diagrams`. Related ADRs: [ADR-0001](docs/adr/0001-adopt-dapr-building-blocks.md) (adopt Dapr), [ADR-0003](docs/adr/0003-four-client-modes.md) (four client modes).
 
 **Cross-cutting concerns visible above:**
 
@@ -184,6 +184,10 @@ Dapr envelopes events in [CloudEvents](https://cloudevents.io/) and propagates W
 Service Invocation to the Products service uses a generated gRPC client pointed at the local Dapr sidecar, with `dapr-app-id` metadata attached. In K8s with per-service namespaces, the app ID is fully-qualified (`products.dapr-go-hero-products`) because Dapr's default name resolver is namespace-scoped — see [docs/containerize-and-deploy.md](docs/containerize-and-deploy.md) for the resolution semantics.
 
 ## Kubernetes Architecture
+
+<p align="center"><img src="docs/diagrams/out/c4-deployment.png" alt="C4 Deployment view: Docker host running a KinD cluster with three namespaces, injected Dapr sidecars, and the host-side cloud-provider-kind LoadBalancer controller" width="800"></p>
+
+Source: [`docs/diagrams/c4-deployment.puml`](docs/diagrams/c4-deployment.puml) · regenerate with `make diagrams`. Decision: see [ADR-0002](docs/adr/0002-cloud-provider-kind-over-metallb.md) for the MetalLB → cloud-provider-kind rationale.
 
 ### Cluster Topology
 
@@ -321,7 +325,7 @@ Multi-stage Alpine with BuildKit cache mounts. Post-initial build, `make docker-
 
 ### Local Cluster Composition
 
-`make kind-up` (alias for `kind-deploy`) brings up the full stack; `make kind-create` just provisions the cluster:
+`make kind-up` (alias for `kind-deploy`) brings up the full stack; `make kind-create` provisions the cluster and installs the LoadBalancer controller + Dapr without deploying application manifests:
 
 - **cloud-provider-kind** — kind-team-maintained host-side controller that watches `Service` objects of type `LoadBalancer` and allocates IPs on the `kind` Docker network. Replaces MetalLB: no in-cluster DaemonSet, no IPAddressPool/L2Advertisement CRDs, works across all supported `kindest/node` versions without release-track drift.
 - **Dapr runtime** via `dapr init -k --runtime-version $(DAPR_RUNTIME_VERSION)` — Operator, Sentry, Placement, Scheduler, Sidecar Injector, pinned to the same version CI uses
@@ -365,7 +369,8 @@ Run `make help` for the full list.
 |--------|-------------|
 | `make build` | Compile both binaries (static, CGO disabled) |
 | `make test` | Unit tests (`go test -race ./...`) |
-| `make integration-test` | Integration tests against real PostgreSQL (Testcontainers) |
+| `make integration-test` | Integration tests (Postgres, Dapr-state stub, gRPC) via Testcontainers |
+| `make format` | Auto-format Go source (`gofmt` + `golangci-lint --fix`) |
 | `make clean` | Remove build artifacts |
 | `make update` | `go get -u ./... && go mod tidy` |
 
@@ -373,10 +378,19 @@ Run `make help` for the full list.
 
 | Target | Description |
 |--------|-------------|
-| `make static-check` | Composite gate: lint + sec + mermaid-lint + deps-prune-check |
-| `make lint` | golangci-lint (with gocritic) + mermaid-lint |
+| `make static-check` | Composite gate: lint-ci + lint + sec + vulncheck + secrets + trivy-fs + trivy-config + mermaid-lint + diagrams-check + deps-prune-check |
+| `make lint` | golangci-lint (gocritic + gosec via `.golangci.yml`) |
+| `make lint-ci` | GitHub Actions workflow linting (actionlint + shellcheck) |
 | `make sec` | gosec SAST scan |
+| `make vulncheck` | `govulncheck ./...` — known CVEs in dependencies |
+| `make secrets` | gitleaks — hardcoded credentials scan |
+| `make trivy-fs` | Trivy filesystem scan (vulns + secrets + misconfigs), CRITICAL+HIGH |
+| `make trivy-config` | Trivy K8s manifest misconfig scan (KSV-*), CRITICAL+HIGH |
 | `make mermaid-lint` | Validate Mermaid diagrams via `minlag/mermaid-cli` Docker image |
+| `make diagrams` | Render PlantUML diagrams via pinned `plantuml/plantuml` image |
+| `make diagrams-check` | CI drift gate: fail if committed PNGs differ from `.puml` sources |
+| `make diagrams-clean` | Remove rendered diagram PNGs |
+| `make deps-prune-check` | Fail if `go.mod`/`go.sum` would be modified by `go mod tidy` |
 
 ### CI
 
@@ -429,11 +443,15 @@ Run `make help` for the full list.
 
 | Target | Description |
 |--------|-------------|
-| `make deps` | Install pinned tools (idempotent) |
+| `make deps` | Install pinned tools (mise, gosec, golangci-lint, govulncheck) |
 | `make deps-act` | Install [act](https://github.com/nektos/act) — auto-invoked by `make ci-run` |
 | `make deps-hadolint` | Install hadolint — auto-invoked by `make docker-lint` |
+| `make deps-gitleaks` | Install gitleaks — auto-invoked by `make secrets` |
+| `make deps-actionlint` | Install actionlint — auto-invoked by `make lint-ci` |
+| `make deps-shellcheck` | Install shellcheck — auto-invoked by `make lint-ci` |
+| `make deps-trivy` | Install Trivy — auto-invoked by `make trivy-fs` / `make trivy-config` |
 | `make deps-check` | Show mise + Go status |
-| `make deps-prune` / `deps-prune-check` | Verify no unused go.mod entries |
+| `make deps-prune` | Run `go mod tidy` (shows any changes needed) |
 | `make generate-env` | Regenerate `.env` from `pkg/config` defaults |
 | `make proto-gen` | Regenerate gRPC code from `.proto` files (uses mise-pinned `protoc`, `protoc-gen-go`, `protoc-gen-go-grpc`) |
 | `make release` | Tag and push a new semver release |
@@ -457,6 +475,14 @@ GitHub Actions runs on every push to `main`, tags `v*`, pull requests, and `work
 [Renovate](https://docs.renovatebot.com/) auto-merges minor/patch updates after CI passes (3-day minimum release age on majors). A single `customManagers` regex in `renovate.json` tracks every `# renovate:` annotated constant in the Makefile — no per-tool configuration.
 
 A scheduled workflow (`.github/workflows/cleanup-runs.yml`) removes workflow runs older than 7 days weekly (retains last 5 regardless of age).
+
+## Architecture Decision Records
+
+See [`docs/adr/`](docs/adr/) for the key non-obvious decisions behind this project:
+
+- [ADR-0001](docs/adr/0001-adopt-dapr-building-blocks.md) — adopting Dapr as the integration runtime
+- [ADR-0002](docs/adr/0002-cloud-provider-kind-over-metallb.md) — cloud-provider-kind over MetalLB for LoadBalancer support
+- [ADR-0003](docs/adr/0003-four-client-modes.md) — shipping four Dapr client implementations side-by-side
 
 ## Further reading
 

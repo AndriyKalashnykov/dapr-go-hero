@@ -33,7 +33,7 @@ func New(log logr.Logger) (*Repository, error) {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("could not connect: %v", err)
+		return nil, fmt.Errorf("could not connect: %w", err)
 	}
 	client := pb.NewProductsClient(conn)
 

@@ -1,0 +1,68 @@
+@startuml c4-deployment
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/v2.11.0/C4_Deployment.puml
+
+' Modern flat styling
+skinparam backgroundColor #FAFAFA
+skinparam shadowing false
+skinparam roundCorner 4
+skinparam defaultFontName "Inter, Helvetica, Arial, sans-serif"
+skinparam defaultFontSize 13
+skinparam ArrowColor #37474F
+skinparam ArrowThickness 1.2
+skinparam rectangleBorderThickness 1.3
+
+UpdateElementStyle("person",          $fontColor="#FFFFFF", $bgColor="#0F766E", $borderColor="#134E4A")
+UpdateElementStyle("container",       $fontColor="#FFFFFF", $bgColor="#2563EB", $borderColor="#1E3A8A")
+UpdateElementStyle("container_db",    $fontColor="#FFFFFF", $bgColor="#7C3AED", $borderColor="#4C1D95")
+UpdateElementStyle("container_queue", $fontColor="#FFFFFF", $bgColor="#DB2777", $borderColor="#831843")
+UpdateElementStyle("deployment_node", $bgColor="#F1F5F9", $borderColor="#94A3B8", $fontColor="#1E293B")
+
+title Deployment — dapr-go-hero on KinD
+
+Deployment_Node(host, "Developer laptop / CI runner", "Linux x86_64") {
+
+  Deployment_Node(docker, "Docker Engine") {
+
+    Container(lb, "cloud-provider-kind", "v0.10.0, Docker container on kind network", "Host-side LB controller — watches Service/LoadBalancer and allocates IPs")
+
+    Deployment_Node(kind, "KinD cluster", "kindest/node:v1.35.1 (K8s 1.35)") {
+
+      Deployment_Node(dapr_sys, "Namespace: dapr-system", "dapr init -k --runtime-version 1.17.4") {
+        Container(dapr_cp, "Dapr control plane", "Operator, Sentry, Placement, Scheduler, Sidecar Injector")
+      }
+
+      Deployment_Node(infra_ns, "Namespace: dapr-go-hero (infra)") {
+        ContainerQueue(redis, "redis Deployment", "redis:8.6-alpine", "Streams-backed pub/sub + gadget state")
+        ContainerDb(postgres, "postgres Deployment", "postgres:18-alpine", "widgets table")
+        Container(zipkin, "zipkin Deployment", "openzipkin/zipkin-slim:3.6.1", "Tracing backend")
+      }
+
+      Deployment_Node(inv_ns, "Namespace: dapr-go-hero-inventory") {
+        Deployment_Node(inv_pod, "inventory Pod", "replicas=1, runAsNonRoot:10001") {
+          Container(inv_app, "inventory", "Go 1.26.2, Fiber v3.1.0", "REST :3000; event handlers")
+          Container(inv_sidecar, "daprd", "Dapr 1.17.4 (injected)", "pub/sub, state, secrets, invoke; mTLS; retries; Zipkin traces")
+        }
+      }
+
+      Deployment_Node(prod_ns, "Namespace: dapr-go-hero-products", "accessControl defaultAction=deny; allow inventory") {
+        Deployment_Node(prod_pod, "products Pod", "replicas=1, runAsNonRoot:10001") {
+          Container(prod_app, "products", "Go 1.26.2, gRPC", "In-memory product store :50151")
+          Container(prod_sidecar, "daprd", "Dapr 1.17.4 (injected)", "Service invocation target; enforces ACL")
+        }
+      }
+    }
+  }
+}
+
+Rel(lb, inv_ns, "Provisions LoadBalancer IP for Service/inventory", "Docker network")
+Rel(inv_sidecar, redis, "XADD / XREADGROUP", "Redis protocol")
+Rel(inv_sidecar, redis, "SET gadget:{id}", "Redis protocol")
+Rel(inv_app, postgres, "pgx: UPSERT widgets", "TCP 5432")
+Rel(inv_sidecar, prod_sidecar, "InvokeMethod(products)", "gRPC, mTLS")
+Rel(inv_sidecar, zipkin, "spans", "HTTP 9411")
+Rel(prod_sidecar, zipkin, "spans", "HTTP 9411")
+Rel(dapr_cp, inv_sidecar, "Configures / issues mTLS certs", "K8s API")
+Rel(dapr_cp, prod_sidecar, "Configures / issues mTLS certs", "K8s API")
+
+SHOW_LEGEND()
+@enduml

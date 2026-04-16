@@ -45,6 +45,14 @@
       "matchStrings": [
         "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)( extractVersion=(?<extractVersion>[^\\s]+))?( versioning=(?<versioning>[^\\s]+))?\\n[a-zA-Z_-]+\\s*=\\s*\"(?<currentValue>[^\"]+)\""
       ]
+    },
+    {
+      "customType": "regex",
+      "description": "Update K8s manifest image tags via inline renovate comments (e.g., k8s/redis.yaml, k8s/zipkin.yaml)",
+      "managerFilePatterns": ["/^k8s/.+\\.ya?ml$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)( versioning=(?<versioning>[^\\s]+))?\\n\\s*image:\\s*(?<depNameShort>[^:\\s]+):(?<currentValue>[^\\s]+)"
+      ]
     }
   ],
   "packageRules": [

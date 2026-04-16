@@ -8,7 +8,6 @@ import (
 	"os"
 	"time"
 
-	zaplog "github.com/AndriyKalashnykov/dapr-go-hero/pkg/log"
 	"github.com/cenkalti/backoff/v5"
 	pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/go-sdk/service/common"
@@ -18,6 +17,8 @@ import (
 	"github.com/oklog/run"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+
+	zaplog "github.com/AndriyKalashnykov/dapr-go-hero/pkg/log"
 
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/components/secrets"
 	"github.com/AndriyKalashnykov/dapr-go-hero/pkg/components/state"
@@ -193,7 +194,8 @@ func main() {
 			widgetRest, gadgetRest, productRest)
 		pb.RegisterAppCallbackServer(gs, server)
 		g.Add(func() error {
-			ln, err := net.Listen("tcp", config.CustomGRPCAddr) // #nosec G102 -- configurable via CUSTOM_GRPC_ADDR
+			lc := &net.ListenConfig{}
+			ln, err := lc.Listen(ctx, "tcp", config.CustomGRPCAddr) // #nosec G102 -- configurable via CUSTOM_GRPC_ADDR
 			if err != nil {
 				return err
 			}

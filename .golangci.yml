@@ -1,19 +1,46 @@
 version: "2"
 
+formatters:
+  enable:
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/AndriyKalashnykov/dapr-go-hero
+
 linters:
   default: standard
   enable:
+    - bodyclose
+    - errorlint
+    - goconst
     - gocritic
+    - gosec
+    - misspell
+    - noctx
 
-linters-settings:
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - performance
-      - style
+  settings:
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
+    gosec:
+      excludes:
+        - G104  # unhandled errors — covered by errcheck
+
+  exclusions:
+    rules:
+      # Generated protobuf — not our code
+      - path: proto/
+        linters:
+          - all
 
 issues:
+  # Report every issue; do not silently discard duplicates
+  max-issues-per-linter: 0
+  max-same-issues: 0
   exclude-dirs:
     - proto
