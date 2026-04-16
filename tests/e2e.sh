@@ -120,14 +120,16 @@ run_mode() {
     patch_inventory_mode "${mode}"
   fi
 
-  echo "=== [${mode}] Waiting for pods to be ready ==="
-  kubectl wait pods -n "${NAMESPACE_INVENTORY}" -l app=inventory \
-    --for condition=Ready --timeout=180s
-  kubectl wait pods -n "${NAMESPACE_PRODUCTS}" -l app=products \
-    --for condition=Ready --timeout=180s
+  echo "=== [${mode}] Waiting for rollouts to be ready ==="
+  # Use rollout status (terminator-safe): waits for Deployment readiness
+  # without tripping on old terminating pods that still match the label.
+  kubectl rollout status deployment/inventory -n "${NAMESPACE_INVENTORY}" --timeout=180s
+  kubectl rollout status deployment/products  -n "${NAMESPACE_PRODUCTS}"  --timeout=180s
 
+  # Resolve the current Running pod (filter out any still-terminating old pod)
   local inv_pod
   inv_pod=$(kubectl get pod -n "${NAMESPACE_INVENTORY}" -l app=inventory \
+    --field-selector=status.phase=Running \
     -o jsonpath='{.items[0].metadata.name}')
 
   echo "=== [${mode}] Port-forward inventory Dapr sidecar ==="
