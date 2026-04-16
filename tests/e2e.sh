@@ -261,11 +261,13 @@ check_resiliency() {
   kubectl scale deployment/products -n "${NAMESPACE_PRODUCTS}" --replicas=1
   kubectl rollout status deployment/products -n "${NAMESPACE_PRODUCTS}" --timeout=120s
 
-  echo "  Waiting up to 30s for redelivery..."
+  echo "  Polling up to 30s for redelivery..."
   local base="http://localhost:3000"
   kubectl port-forward svc/inventory 3000:3000 -n "${NAMESPACE_INVENTORY}" >/dev/null 2>&1 &
   PF_PIDS+=($!)
-  wait_for_url "inventory REST :3000 (resiliency)" "${base}/v1/products/thingamajig" 30 || return
+  sleep 2  # let port-forward establish; no reachability gate here —
+           # the endpoint may legitimately 404 while Dapr retries, and
+           # a gate that counts 404 as FAIL masks the actual assertion below.
 
   local ok=0
   for _ in $(seq 1 30); do
@@ -281,7 +283,9 @@ check_resiliency() {
     PASS=$((PASS+1))
   else
     # Not a hard failure: redelivery semantics depend on broker config.
-    # A shipped demo with Redis streams may not redeliver automatically.
+    # Redis pubsub does not ack-retry, so published-during-outage events
+    # may be lost. The recovery itself (pod restart, sidecar resume) is
+    # still validated by the rest of the e2e suite.
     echo "  WARN: event not redelivered after recovery (Redis pubsub does not ack-retry by default)"
   fi
 }
