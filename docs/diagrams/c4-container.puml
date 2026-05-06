@@ -52,24 +52,18 @@ Lay_D(redis, postgres)
 Lay_D(postgres, zipkin)
 Lay_L(prod_ns, k8s_secret)
 
-' --- ingress / broker ---
+' --- ingress + delivery (single arrow per pair: pub/sub round-trip is implicit) ---
 Rel(publisher, inv_dapr, "POST /v1.0/publish/pubsub/inventory", "HTTPS, CloudEvents v1.0")
-Rel(inv_dapr, redis,     "XADD → 'inventory' stream")
-Rel(redis, inv_dapr,     "XREADGROUP (redeliver after 30s)")
+Rel_Neighbor(inv_dapr, redis, "pub/sub (XADD/XREADGROUP) + gadget state (SET)")
 Rel(inv_dapr, inventory, "Deliver event — routed by event.type")
 
-' --- widget route: Secret Store + PostgreSQL ---
-Rel(inventory, inv_dapr,    "widget.v1 → GetSecret(postgres)")
-Rel(inv_dapr, k8s_secret,   "Read secret")
-Rel(inventory, postgres,    "pgx: UPSERT widget")
-
-' --- gadget route: State Store ---
-Rel(inventory, inv_dapr, "gadget.v1 → SaveState(gadget)")
-Rel(inv_dapr, redis,     "SET gadget:{id}")
+' --- per-route building-block API calls (one arrow per pair) ---
+Rel(inventory, inv_dapr, "widget.v1: GetSecret(postgres)\ngadget.v1: SaveState(gadget)\nthingamajig.v1: InvokeMethod(products)")
+Rel(inv_dapr, k8s_secret, "Read secret (postgres creds)")
+Rel(inventory, postgres,  "pgx: UPSERT widget", "TCP 5432")
 
 ' --- products route: Service Invocation + mTLS ---
-Rel(inventory, inv_dapr,  "thingamajig.v1 → InvokeMethod(products)")
-Rel(inv_dapr, prod_dapr,  "gRPC over mTLS; retry 3× + CB", "gRPC, mTLS")
+Rel(inv_dapr, prod_dapr,  "InvokeMethod — retry 3× + CB", "gRPC, mTLS")
 Rel(prod_dapr, products,  "SaveProduct / GetProduct")
 
 ' --- tracing ---

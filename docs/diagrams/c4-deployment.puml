@@ -55,8 +55,7 @@ Deployment_Node(host, "Developer laptop / CI runner", "Linux x86_64") {
 }
 
 Rel(lb, inv_ns, "Provisions LoadBalancer IP for Service/inventory", "Docker network")
-Rel(inv_sidecar, redis, "XADD / XREADGROUP", "Redis protocol")
-Rel(inv_sidecar, redis, "SET gadget:{id}", "Redis protocol")
+Rel(inv_sidecar, redis, "pub/sub + gadget state", "Redis protocol")
 Rel(inv_app, postgres, "pgx: UPSERT widgets", "TCP 5432")
 Rel(inv_sidecar, prod_sidecar, "InvokeMethod(products)", "gRPC, mTLS")
 Rel(inv_sidecar, zipkin, "spans", "HTTP 9411")
