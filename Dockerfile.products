@@ -1,5 +1,12 @@
 # syntax=docker/dockerfile:1
-FROM golang:1.26-alpine AS builder
+# Builder runs on the host architecture (BUILDPLATFORM) and cross-compiles
+# the Go binary to the target architecture (TARGETARCH) buildx requested.
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
+
+# Defaults so plain `docker build` (no buildx) still works — buildx
+# overrides these from --platform for multi-arch CI builds.
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
 
 WORKDIR /src
 
@@ -10,7 +17,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o /products ./cmd/products/main.go
+    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+        go build -a -o /products ./cmd/products
 
 FROM alpine:3.23
 

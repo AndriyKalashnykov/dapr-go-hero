@@ -34,6 +34,7 @@ make deps-prune-check   # Verify no prunable dependencies (CI gate)
 make release            # Tag and push a release (runs full build first)
 make docker-build       # Build container images (inventory + products)
 make docker-lint        # Lint Dockerfiles with hadolint
+make docker-smoke-test  # Boot each image briefly and assert it stays up (Gate 3 of /harden-image-pipeline; SERVICES=name to scope)
 make kind-up            # Full stack: create KinD cluster + cloud-provider-kind + Dapr + deploy manifests (alias for kind-deploy)
 make kind-down          # Full teardown (alias for kind-destroy)
 make kind-create        # Cluster + LoadBalancer controller + Dapr (no app deploy)
@@ -175,7 +176,7 @@ GitHub Actions CI workflow (`.github/workflows/ci.yml`) runs on every push to `m
 | **build** | changes, static-check | Checkout, Set up Go, `make build` |
 | **test** | changes, static-check | Checkout, Set up Go, `make test` |
 | **integration-test** | changes, static-check | Checkout, Set up Go, `make integration-test` (Testcontainers PostgreSQL) |
-| **docker** | changes, static-check | Checkout, Set up Go, `make docker-build`, Trivy CVE scan on each image |
+| **docker** | changes, static-check, build, test | **Tag-gated** (`refs/tags/v*`). `strategy.matrix.service: [inventory, products]`. Per service: setup-qemu + setup-buildx, docker/metadata-action, single-arch build (`load: true`) → Trivy image scan (CRITICAL/HIGH blocking) → `make docker-smoke-test` → log in to GHCR → multi-arch push (`linux/amd64,linux/arm64`, `provenance: false`, `sbom: false` — Pattern A so GHCR "OS / Arch" tab renders) → cosign keyless OIDC signing by digest |
 | **e2e** | changes, build, test | KinD via `helm/kind-action`, `dapr/setup-dapr` CLI install, `make kind-bootstrap`, `make k8s-deploy`, `make e2e-all`, `make k8s-status` on failure |
 | **ci-pass** | all above (`if: always()`) | Aggregate gate — single required status check for branch protection; passes when every other job either succeeded or was skipped via path-filter |
 

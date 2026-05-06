@@ -419,9 +419,10 @@ Run `make help` for the full list.
 
 | Target | Description |
 |--------|-------------|
-| `make docker-build` | Build both images (BuildKit + cache mounts) |
+| `make docker-build` | Build both images (BuildKit + cache mounts; multi-arch-ready Dockerfiles) |
 | `make docker-push` | Push to `$(REGISTRY)` |
 | `make docker-lint` | Hadolint on Dockerfiles |
+| `make docker-smoke-test` | Boot each image briefly + assert it stays up — local equivalent of CI Gate 3. Override `SERVICES=inventory` to scope. |
 | `make kind-up` | Full stack: create cluster + cloud-provider-kind + Dapr + deploy manifests (alias for `kind-deploy`) |
 | `make kind-down` | Full teardown (alias for `kind-destroy`) |
 | `make kind-create` | Create cluster + install LoadBalancer controller + Dapr (no app deploy) |
@@ -459,9 +460,40 @@ GitHub Actions runs on every push to `main`, tags `v*`, pull requests, and `work
 | `build` | changes, static-check | Compile both binaries |
 | `test` | changes, static-check | Unit tests (`go test -race ./...`) |
 | `integration-test` | changes, static-check | Integration tests with Testcontainers PostgreSQL (`make integration-test`) |
-| `docker` | changes, static-check | Build container images locally + Trivy CVE scan on each image (CRITICAL/HIGH, fixed-only) |
+| `docker` | changes, static-check, build, test | **Tag-gated** (`refs/tags/v*`) hardened image publish pipeline — see [Pre-push image hardening](#pre-push-image-hardening) below. Skipped on non-tag pushes |
 | `e2e` | changes, build, test | Provision KinD + cloud-provider-kind + Dapr, deploy, run 11 end-to-end assertions across all 4 client modes (`make e2e-all`). Gated on code-affecting paths or the `run-e2e` PR label |
 | `ci-pass` | all above | Aggregate gate — single required status check for branch protection |
+
+### Pre-push image hardening
+
+The `docker` job runs the following gates **before** any image is pushed to GHCR. Any failure blocks the release. The job is tag-gated (`refs/tags/v*`) and runs once per service via `strategy.matrix`.
+
+| # | Gate | Catches | Tool |
+|---|------|---------|------|
+| 1 | Build local single-arch image (`load: true`) | Build regressions on the runner architecture | `docker/build-push-action` |
+| 2 | **Trivy image scan** (CRITICAL/HIGH, fixed-only — blocking) | CVEs in the alpine base layer, OS packages, and our own files | `aquasecurity/trivy-action` with `image-ref:` |
+| 3 | **Smoke test** (`make docker-smoke-test`) | Image boots correctly: USER 10001 has read/exec, libc deps resolve, ENTRYPOINT wired, Go runtime starts | `docker run` + boot-marker probe |
+| 4 | Multi-arch build + push (`linux/amd64,linux/arm64`) | Publishes for both Intel and ARM consumers (Apple Silicon, Graviton, Pi, etc.) | `docker/build-push-action` with `platforms:` |
+| 5 | **Cosign keyless OIDC signing** | Sigstore signature on the manifest digest | `sigstore/cosign-installer` + `cosign sign` |
+
+Buildkit in-manifest attestations (`provenance` + `sbom`) are deliberately disabled so the image index stays free of `unknown/unknown` platform entries — this lets the GHCR Packages UI render the "OS / Arch" tab for the multi-arch manifest. Cosign keyless signing still provides the Sigstore signature for supply-chain verification.
+
+**Pull a published image:**
+
+```bash
+docker pull ghcr.io/AndriyKalashnykov/dapr-go-hero/inventory:latest
+docker pull ghcr.io/AndriyKalashnykov/dapr-go-hero/products:latest
+```
+
+**Verify the cosign signature:**
+
+```bash
+cosign verify ghcr.io/AndriyKalashnykov/dapr-go-hero/inventory:<tag> \
+  --certificate-identity-regexp 'https://github\.com/AndriyKalashnykov/dapr-go-hero/.+' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+**Local parity:** the same gates run via `make docker-build && make docker-smoke-test` before tagging a release. Pre-push is the second line of defense; the local commands catch most regressions earlier.
 
 The `changes` job uses the canonical path-filter expression so doc-only changes (`**.md`, `docs/**`, `LICENSE`, etc.) are detected at the workflow-run level rather than the trigger level. Trigger-level `paths-ignore` would create a Repository-Rulesets deadlock: no run, no `ci-pass` status, blocked merge.
 

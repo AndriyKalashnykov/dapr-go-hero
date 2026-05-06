@@ -134,9 +134,9 @@ format: deps
 #build: @ Build inventory and products binaries
 build: deps
 	@export GOFLAGS=$(GOFLAGS) CGO_ENABLED=0 GOOS=linux GOARCH=amd64 && \
-		go build -a -o ./cmd/inventory/main ./cmd/inventory/main.go
+		go build -a -o ./cmd/inventory/main ./cmd/inventory
 	@export GOFLAGS=$(GOFLAGS) CGO_ENABLED=0 GOOS=linux GOARCH=amd64 && \
-		go build -a -o ./cmd/products/products ./cmd/products/main.go
+		go build -a -o ./cmd/products/products ./cmd/products
 
 #run: @ Run inventory service with Dapr (default: SDK HTTP mode)
 run: deps
@@ -283,6 +283,20 @@ ci-run: deps
 			--artifact-server-path "$$ARTIFACT_PATH" || exit 1; \
 	done
 
+#ci-run-tag: @ Exercise the tag-gated docker job under act (cosign + push will fail without OIDC + GHCR auth — expected)
+ci-run-tag: deps
+	@docker container prune -f 2>/dev/null || true
+	@TAG="$$(git describe --tags --abbrev=0 2>/dev/null || echo v0.0.0-test)"; \
+		EVT=$$(mktemp -t act-tag-event.XXXXXX.json); \
+		printf '{"ref":"refs/tags/%s","ref_type":"tag"}' "$$TAG" > "$$EVT"; \
+		echo "==== act push --job docker (tag=$$TAG, expect failure at GHCR push / cosign — no creds under act) ===="; \
+		act push --job docker \
+			--pull=false \
+			--eventpath "$$EVT" \
+			-P ubuntu-24.04=catthehacker/ubuntu:$(ACT_UBUNTU_VERSION) \
+			--container-architecture linux/amd64 || true; \
+		rm -f "$$EVT"
+
 #release: @ Create and push a new tag
 release: build
 	@bash -c 'read -p "New tag (current: $(CURRENTTAG)): " newtag && \
@@ -407,6 +421,52 @@ docker-push:
 #docker-lint: @ Lint Dockerfiles with hadolint
 docker-lint: deps
 	@hadolint Dockerfile.inventory Dockerfile.products
+
+# Services covered by the docker-smoke-test target. Override per-CI-runner
+# in the workflow matrix: `SERVICES=inventory make docker-smoke-test`.
+SERVICES ?= inventory products
+
+#docker-smoke-test: @ Boot each image briefly and assert the binary stays up (Gate 3 of /harden-image-pipeline)
+# Both binaries depend on Dapr+Postgres+Redis to do anything useful, so a
+# health-endpoint smoke test isn't viable. The boot-marker pattern works
+# instead: each binary fails fast with a recognizable log line if its
+# expected env is missing, OR keeps a connection retry loop alive
+# (logged "Retrying Dapr client connection..."). Either case proves the
+# Go runtime started, the binary's USER 10001 has read/exec permission on
+# the entrypoint, libc deps resolve, and the static binary's ENTRYPOINT
+# is correctly wired. We assert log activity within 10s and a still-alive
+# container after 12s — this catches the regression class the gate exists
+# to catch (image-build broke the binary, missing libc, USER perm error).
+#
+# Override SERVICES in CI matrix: `SERVICES=inventory make docker-smoke-test`.
+# Override REGISTRY/TAG to point at differently-tagged images.
+docker-smoke-test:
+	@command -v docker >/dev/null 2>&1 || { echo "ERROR: docker required"; exit 1; }
+	@FAIL=0; \
+	for svc in $(SERVICES); do \
+		echo "=== Smoke: $${svc} ==="; \
+		docker rm -f $${svc}-smoke >/dev/null 2>&1 || true; \
+		docker run -d --name=$${svc}-smoke "$(REGISTRY)/$${svc}:$(TAG)" >/dev/null; \
+		end=$$(( $$(date +%s) + 10 )); \
+		seen=0; \
+		while [ $$(date +%s) -lt $$end ]; do \
+			if [ "$$(docker logs $${svc}-smoke 2>&1 | wc -c)" -gt 0 ]; then seen=1; break; fi; \
+			sleep 1; \
+		done; \
+		sleep 2; \
+		if [ "$$seen" = "0" ]; then \
+			echo "  FAIL: $${svc} produced no log output within 10s"; \
+			FAIL=1; \
+		elif [ -z "$$(docker ps -q -f name=$${svc}-smoke)" ]; then \
+			echo "  FAIL: $${svc} container exited before 12s — startup crash"; \
+			docker logs $${svc}-smoke 2>&1 | sed 's/^/    /'; \
+			FAIL=1; \
+		else \
+			echo "  PASS: $${svc} booted (logging) and stayed up"; \
+		fi; \
+		docker rm -f $${svc}-smoke >/dev/null 2>&1 || true; \
+	done; \
+	exit $$FAIL
 
 # =============================================================================
 # KinD + Kubernetes
@@ -546,13 +606,13 @@ e2e-teardown: k8s-undeploy kind-destroy
 	clean format build run test integration-test update \
 	lint sec vulncheck secrets trivy-fs trivy-config lint-ci mermaid-lint \
 	diagrams diagrams-clean diagrams-check \
-	static-check ci ci-run release \
+	static-check ci ci-run ci-run-tag release \
 	dapr-test run-custom-http run-custom-grpc run-sdk-http run-sdk-grpc run-products \
 	send-widget send-gadget send-thingamajig send-all \
 	get-widget get-gadget get-thingamajig get-all \
 	renovate-bootstrap renovate-validate \
 	generate-env proto-gen \
-	docker-build docker-push docker-lint \
+	docker-build docker-push docker-lint docker-smoke-test \
 	kind-create kind-bootstrap kind-destroy kind-deploy kind-up kind-down \
 	k8s-deploy k8s-undeploy k8s-status \
 	e2e e2e-all e2e-setup e2e-teardown

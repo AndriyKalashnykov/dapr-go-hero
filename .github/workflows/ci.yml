@@ -127,42 +127,132 @@ jobs:
       - name: Test
         run: make integration-test
 
-  # Build container images locally and Trivy-scan them. The project doesn't
-  # publish images today (see CLAUDE.md), so this is a pre-push quality gate
-  # only — it catches CVEs in the alpine base layer or our own files before
-  # they regress.
+  # Hardened image publish pipeline (per /harden-image-pipeline, Pattern A).
+  #
+  # Tag-gated: runs only on `refs/tags/v*` pushes. On normal pushes/PRs it is
+  # skipped — `ci-pass` treats `skipped` as non-failure so branch protection
+  # stays green. The gates run BEFORE any push, so a CVE or smoke-test
+  # regression blocks the release rather than shipping.
+  #
+  # Why two builds: docker/build-push-action cannot do `load: true` AND
+  # multi-arch `push: true` in a single step (the local Docker daemon holds
+  # only one arch at a time). The first build loads single-arch into the
+  # daemon for scanning + smoke; the second pushes multi-arch. cache-from:
+  # type=gha makes the second build ~95% cache-hit.
+  #
+  # provenance: false + sbom: false (Pattern A): keeps the OCI image index
+  # free of `unknown/unknown` attestation-manifest entries so the GHCR
+  # Packages UI's "OS / Arch" tab renders. Cosign keyless signing below
+  # provides supply-chain verification.
   docker:
-    needs: [changes, static-check]
-    if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'true' }}
+    if: ${{ startsWith(github.ref, 'refs/tags/') }}
+    needs: [changes, static-check, build, test]
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write       # GHCR push
+      id-token: write       # cosign keyless OIDC (Sigstore Fulcio)
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [inventory, products]
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Set up Go
-        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # v4.0.0
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
         with:
-          cache: true
+          # GHCR repo-namespace: ghcr.io/<owner>/<repo>/<service>.
+          # User-namespace (ghcr.io/<owner>/<service>) cannot be created
+          # by GITHUB_TOKEN on a user account — see /harden-image-pipeline
+          # "GHCR namespace rule".
+          images: ghcr.io/${{ github.repository }}/${{ matrix.service }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+          flavor: |
+            latest=true
 
-      - name: Build
-        run: make docker-build
+      # ===== Gate 1: local single-arch build for scanning + smoke testing =====
+      - name: Build image for scan
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        with:
+          context: .
+          file: ./Dockerfile.${{ matrix.service }}
+          platforms: linux/amd64
+          load: true
+          tags: ${{ matrix.service }}:scan
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
-      - name: Scan inventory image
+      # ===== Gate 2: Trivy image scan (CRITICAL/HIGH blocking) =====
+      - name: Trivy image scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: dapr-go-hero/inventory:dev
-          severity: CRITICAL,HIGH
+          image-ref: ${{ matrix.service }}:scan
+          scanners: 'vuln,secret,misconfig'
+          severity: 'CRITICAL,HIGH'
           exit-code: '1'
           ignore-unfixed: true
 
-      - name: Scan products image
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+      # ===== Gate 3: smoke test — container boots and stays up =====
+      # Reuses the local `make docker-smoke-test` target so contributors run
+      # the same gate via `make docker-build && make docker-smoke-test`
+      # before tagging. Re-tags the scan image to the REGISTRY/TAG layout
+      # the target expects, then scopes to the matrix service via SERVICES.
+      - name: Smoke test
+        run: |
+          docker tag ${{ matrix.service }}:scan dapr-go-hero/${{ matrix.service }}:smoke
+          SERVICES=${{ matrix.service }} REGISTRY=dapr-go-hero TAG=smoke make docker-smoke-test
+
+      # ===== All gates passed → publish multi-arch (clean index) =====
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
-          image-ref: dapr-go-hero/products:dev
-          severity: CRITICAL,HIGH
-          exit-code: '1'
-          ignore-unfixed: true
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push (multi-arch)
+        id: push
+        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+        with:
+          context: .
+          file: ./Dockerfile.${{ matrix.service }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false   # keep OCI index clean so GHCR "OS / Arch" tab renders
+          sbom: false         # cosign keyless signing below provides supply-chain verification
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+
+      # ===== Post-push: cosign keyless OIDC signing =====
+      - name: Install cosign
+        uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
+
+      - name: Sign image with cosign
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            echo "→ cosign sign ${tag}@${DIGEST}"
+            cosign sign --yes "${tag}@${DIGEST}"
+          done <<< "${TAGS}"
 
   e2e:
     needs: [changes, build, test]
