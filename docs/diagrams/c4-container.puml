@@ -25,13 +25,13 @@ title Container View — dapr-go-hero
 Person(publisher, "Event Publisher", "External system / test harness")
 
 System_Boundary(inv_ns, "Namespace: dapr-go-hero-inventory") {
-  Container(inv_dapr, "Dapr Sidecar", "Dapr 1.17.4", "pub/sub, state store, secret store,\nservice invocation; resiliency; mTLS; tracing")
-  Container(inventory, "Inventory Service", "Go 1.26, Fiber v3", "Public REST API :3000; event handlers\nrouted by event.type")
+  Container(inv_dapr, "Dapr Sidecar", "Dapr 1.17.6", "pub/sub, state store, secret store,\nservice invocation; resiliency; mTLS; tracing")
+  Container(inventory, "Inventory Service", "Go 1.26.2, Fiber v3.1.0", "Public REST API :3000; event handlers\nrouted by event.type")
 }
 
 System_Boundary(prod_ns, "Namespace: dapr-go-hero-products") {
-  Container(prod_dapr, "Dapr Sidecar", "Dapr 1.17.4", "access control: defaultAction=deny;\nallowlist: inventory only")
-  Container(products, "Products Service", "Go 1.26, gRPC", "In-memory product store :50151")
+  Container(prod_dapr, "Dapr Sidecar", "Dapr 1.17.6", "access control: defaultAction=deny;\nallowlist: inventory only")
+  Container(products, "Products Service", "Go 1.26.2, gRPC", "In-memory product store :50151")
 }
 
 System_Boundary(infra_ns, "Namespace: dapr-go-hero (infra)") {

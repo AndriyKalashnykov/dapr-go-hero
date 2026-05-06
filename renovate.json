@@ -4,7 +4,10 @@
     "config:best-practices",
     ":semanticCommitType(chore)"
   ],
-  "enabledManagers": ["gomod", "github-actions", "dockerfile", "custom.regex"],
+  "enabledManagers": ["gomod", "github-actions", "dockerfile", "kubernetes", "custom.regex"],
+  "kubernetes": {
+    "managerFilePatterns": ["/^k8s/.+\\.ya?ml$/"]
+  },
   "postUpdateOptions": [
     "gomodTidy"
   ],
@@ -18,7 +21,7 @@
   "prHourlyLimit": 0,
   "platformAutomerge": true,
   "automerge": true,
-  "automergeType": "branch",
+  "automergeType": "pr",
   "automergeStrategy": "squash",
   "ignoreTests": false,
   "vulnerabilityAlerts": {
@@ -48,10 +51,10 @@
     },
     {
       "customType": "regex",
-      "description": "Update K8s manifest image tags via inline renovate comments (e.g., k8s/redis.yaml, k8s/zipkin.yaml)",
-      "managerFilePatterns": ["/^k8s/.+\\.ya?ml$/"],
+      "description": "Update GitHub Actions workflow `with:` value pins via inline renovate comments (e.g., dapr/setup-dapr@v2 with: version)",
+      "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
       "matchStrings": [
-        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)( versioning=(?<versioning>[^\\s]+))?\\n\\s*image:\\s*(?<depNameShort>[^:\\s]+):(?<currentValue>[^\\s]+)"
+        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)( versioning=(?<versioning>[^\\s]+))?\\n\\s*[a-zA-Z_]+:\\s*['\"]?(?<currentValue>[^'\"\\s]+)['\"]?"
       ]
     }
   ],
@@ -71,13 +74,11 @@
       "groupName": "GitHub Actions"
     },
     {
-      "description": "Bump Go version in go.mod to latest patch",
-      "matchManagers": [
-        "gomod"
-      ],
+      "description": "Group Go toolchain bumps so go.mod and .mise.toml land in one PR (gomod 'go' and custom-regex 'go' would otherwise race)",
       "matchDepNames": [
         "go"
       ],
+      "groupName": "Go toolchain",
       "rangeStrategy": "bump"
     },
     {

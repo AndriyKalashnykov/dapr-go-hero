@@ -5,52 +5,38 @@ APP_NAME       := dapr-go-hero
 CURRENTTAG     := $(shell git describe --tags --abbrev=0 2>/dev/null || echo "dev")
 GOFLAGS        := -mod=mod
 
-# Ensure tools installed to ~/.local/bin (hadolint, act, gitleaks, actionlint,
-# shellcheck, trivy, mise) are on PATH for every recipe — needed inside the
-# act runner container where this path is not preconfigured.
-export PATH := $(HOME)/.local/bin:$(PATH)
-
-# === Tool Versions (pinned) ===
-# renovate: datasource=github-releases depName=securego/gosec
-GOSEC_VERSION                 := 2.25.0
-# renovate: datasource=github-releases depName=golangci/golangci-lint
-GOLANGCI_LINT_VERSION         := 2.11.4
-# renovate: datasource=go depName=golang.org/x/vuln/cmd/govulncheck
-GOVULNCHECK_VERSION           := 1.1.4
-# renovate: datasource=github-releases depName=zricethezav/gitleaks
-GITLEAKS_VERSION              := 8.30.1
-# renovate: datasource=github-releases depName=rhysd/actionlint
-ACTIONLINT_VERSION            := 1.7.12
-# renovate: datasource=github-releases depName=koalaman/shellcheck
-SHELLCHECK_VERSION            := 0.11.0
-# renovate: datasource=github-releases depName=aquasecurity/trivy
-TRIVY_VERSION                 := 0.69.3
-# renovate: datasource=github-releases depName=nektos/act
-ACT_VERSION                   := 0.2.87
-# renovate: datasource=github-releases depName=jdx/mise
-MISE_VERSION                  := 2026.4.14
+# mise shim directory MUST come first so recipes resolve mise-managed tools
+# (golangci-lint, gitleaks, actionlint, shellcheck, trivy, act, hadolint, kind,
+# protoc, protoc-gen-go, protoc-gen-go-grpc, etc.) without needing `mise activate`.
+# ~/.local/bin retained for go-installed tools (gosec, govulncheck) and as a
+# fallback inside the act runner container.
+export PATH := $(HOME)/.local/share/mise/shims:$(HOME)/.local/bin:$(PATH)
 
 # === Dapr Versions (pinned) ===
+# All binary tooling (gosec, govulncheck, golangci-lint, gitleaks, actionlint,
+# shellcheck, trivy, act, hadolint, kind, plus codegen tools) is pinned in
+# .mise.toml. Only Docker image tags and Dapr runtime/component versions
+# remain here.
 # renovate: datasource=github-releases depName=dapr/dapr
-DAPR_RUNTIME_VERSION          := 1.17.4
-
-# Codegen tool versions (protoc, protoc-gen-go, protoc-gen-go-grpc) are pinned in .mise.toml
+DAPR_RUNTIME_VERSION          := 1.17.6
 
 # === K8s / Docker Versions (pinned) ===
-# renovate: datasource=github-releases depName=kubernetes-sigs/kind
-KIND_VERSION                  := 0.31.0
-# Manual: KinD publishes one `kindest/node:<version>` image per KinD release.
-# Track KIND_VERSION's release notes — do NOT bump past what that release ships.
-# KinD v0.31.0 ships kindest/node:v1.35.1 only.
-KIND_NODE_IMAGE               := v1.35.1
+# kindest/node is pinned by digest because Docker tags are mutable. The KinD
+# release notes say which kindest/node release goes with which KIND_VERSION;
+# bump in lockstep when bumping kind in .mise.toml.
+# renovate: datasource=docker depName=kindest/node
+KIND_NODE_IMAGE               := kindest/node:v1.35.1@sha256:05d7bcdefbda08b4e038f644c4df690cdac3fba8b06f8289f30e10026720a1ab
+# cloud-provider-kind is consumed as a Docker image (host-side LB controller),
+# NOT as a CLI on PATH, so it stays Makefile-pinned rather than mise-managed.
 # renovate: datasource=github-releases depName=kubernetes-sigs/cloud-provider-kind
 CLOUD_PROVIDER_KIND_VERSION   := 0.10.0
-# renovate: datasource=github-releases depName=hadolint/hadolint
-HADOLINT_VERSION              := 2.14.0
 # renovate: datasource=docker depName=minlag/mermaid-cli
 MERMAID_CLI_VERSION           := 11.12.0
 # renovate: datasource=docker depName=plantuml/plantuml
 PLANTUML_VERSION              := 1.2026.2
+# act runner image — pinned to avoid silently consuming :act-latest.
+# renovate: datasource=docker depName=catthehacker/ubuntu versioning=loose
+ACT_UBUNTU_VERSION            := act-24.04
 
 # === Docker / K8s Config ===
 CLUSTER_NAME   := $(APP_NAME)
@@ -59,6 +45,13 @@ TAG            ?= dev
 NS_INFRA       := dapr-go-hero
 NS_INVENTORY   := dapr-go-hero-inventory
 NS_PRODUCTS    := dapr-go-hero-products
+
+# === kubectl context safety ===
+# Pinning the context per recipe protects against parallel `make` invocations
+# from sibling KinD-using projects that overwrite the global current-context
+# via `kubectl config use-context`. Failure mode without this is silent
+# ("namespaces not found"). Always invoke as $(KUBECTL) in recipes.
+KUBECTL        := kubectl --context=kind-$(CLUSTER_NAME)
 
 # === Go Version Management ===
 GO_VERSION := $(shell grep -oP '^go \K[0-9.]+' go.mod)
@@ -70,86 +63,31 @@ help:
 	@grep -E '[a-zA-Z\.\-]+:.*?@ .*$$' $(MAKEFILE_LIST)| tr -d '#' | awk 'BEGIN {FS = ":.*?@ "}; {printf "\033[32m%-25s\033[0m - %s\n", $$1, $$2}'
 
 # =============================================================================
-# deps — tool installation (idempotent, no sudo, installs to ~/.local/bin)
+# deps — tool installation (idempotent, no sudo, mise-driven)
 # =============================================================================
+#
+# Strategy: mise owns all binary tools (golangci-lint, gitleaks, actionlint,
+# shellcheck, trivy, act, hadolint, kind, protoc, protoc-gen-go,
+# protoc-gen-go-grpc, plus Go and Node toolchains). Only gosec and govulncheck
+# stay as `go install` because they aren't carried by the mise registry.
+#
+# In CI (where $CI is set) the curl-bootstrap is skipped — jdx/mise-action
+# handles installer bootstrap — but `mise install --yes` MUST still run so any
+# tools added to .mise.toml since the last cache-hit are materialized.
 
-#deps: @ Install required tool dependencies (idempotent)
+#deps: @ Install required tool dependencies (idempotent, mise-driven)
 deps:
-	@# Install mise if not present (local development only, CI uses jdx/mise-action)
 	@if [ -z "$$CI" ] && ! command -v mise >/dev/null 2>&1; then \
-		echo "Installing mise v$(MISE_VERSION)..."; \
-		curl -fsSL https://mise.jdx.dev/install.sh | MISE_VERSION=v$(MISE_VERSION) bash; \
+		echo "Installing mise..."; \
+		curl -fsSL https://mise.run | sh; \
 		echo ""; \
 		echo "mise installed. Activate it in your shell:"; \
 		echo '  echo '\''eval "$$(mise activate)"'\'' >> ~/.bashrc'; \
 		echo "Then re-run 'make deps'."; \
 		exit 0; \
 	fi
-	@if [ -z "$$CI" ] && command -v mise >/dev/null 2>&1; then \
-		mise install --yes; \
-	else \
-		command -v go >/dev/null 2>&1 || { echo "Error: Go required. Install mise (https://mise.jdx.dev) or Go (https://go.dev/dl/)"; exit 1; }; \
-	fi
-	@command -v gosec >/dev/null 2>&1 || { echo "Installing gosec v$(GOSEC_VERSION)..."; \
-		go install github.com/securego/gosec/v2/cmd/gosec@v$(GOSEC_VERSION); }
-	@command -v golangci-lint >/dev/null 2>&1 || { echo "Installing golangci-lint v$(GOLANGCI_LINT_VERSION)..."; \
-		go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v$(GOLANGCI_LINT_VERSION); }
-	@command -v govulncheck >/dev/null 2>&1 || { echo "Installing govulncheck v$(GOVULNCHECK_VERSION)..."; \
-		go install golang.org/x/vuln/cmd/govulncheck@v$(GOVULNCHECK_VERSION); }
-
-#deps-act: @ Install act for running GitHub Actions locally
-deps-act: deps
-	@command -v act >/dev/null 2>&1 || { echo "Installing act v$(ACT_VERSION)..."; \
-		mkdir -p $$HOME/.local/bin; \
-		curl -sSfL https://raw.githubusercontent.com/nektos/act/v$(ACT_VERSION)/install.sh | \
-			bash -s -- -b $$HOME/.local/bin v$(ACT_VERSION); \
-	}
-
-#deps-hadolint: @ Install hadolint for Dockerfile linting
-deps-hadolint:
-	@command -v hadolint >/dev/null 2>&1 || { echo "Installing hadolint v$(HADOLINT_VERSION)..."; \
-		mkdir -p $$HOME/.local/bin; \
-		curl -sSfL -o $$HOME/.local/bin/hadolint "https://github.com/hadolint/hadolint/releases/download/v$(HADOLINT_VERSION)/hadolint-Linux-x86_64"; \
-		chmod +x $$HOME/.local/bin/hadolint; \
-	}
-
-#deps-gitleaks: @ Install gitleaks for secret scanning
-deps-gitleaks:
-	@command -v gitleaks >/dev/null 2>&1 || { echo "Installing gitleaks v$(GITLEAKS_VERSION)..."; \
-		mkdir -p $$HOME/.local/bin; \
-		curl -sSfL -o /tmp/gitleaks.tar.gz "https://github.com/zricethezav/gitleaks/releases/download/v$(GITLEAKS_VERSION)/gitleaks_$(GITLEAKS_VERSION)_linux_x64.tar.gz"; \
-		tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks; \
-		install -m 755 /tmp/gitleaks $$HOME/.local/bin/gitleaks; \
-		rm -f /tmp/gitleaks.tar.gz /tmp/gitleaks; \
-	}
-
-#deps-actionlint: @ Install actionlint for GitHub Actions workflow linting
-deps-actionlint:
-	@command -v actionlint >/dev/null 2>&1 || { echo "Installing actionlint v$(ACTIONLINT_VERSION)..."; \
-		mkdir -p $$HOME/.local/bin; \
-		curl -sSfL -o /tmp/actionlint.tar.gz "https://github.com/rhysd/actionlint/releases/download/v$(ACTIONLINT_VERSION)/actionlint_$(ACTIONLINT_VERSION)_linux_amd64.tar.gz"; \
-		tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint; \
-		install -m 755 /tmp/actionlint $$HOME/.local/bin/actionlint; \
-		rm -f /tmp/actionlint.tar.gz /tmp/actionlint; \
-	}
-
-#deps-shellcheck: @ Install shellcheck (used by actionlint for workflow run-step linting)
-deps-shellcheck:
-	@command -v shellcheck >/dev/null 2>&1 || { echo "Installing shellcheck v$(SHELLCHECK_VERSION)..."; \
-		mkdir -p $$HOME/.local/bin; \
-		curl -sSfL -o /tmp/shellcheck.tar.xz "https://github.com/koalaman/shellcheck/releases/download/v$(SHELLCHECK_VERSION)/shellcheck-v$(SHELLCHECK_VERSION).linux.x86_64.tar.xz"; \
-		tar -xJf /tmp/shellcheck.tar.xz -C /tmp; \
-		install -m 755 /tmp/shellcheck-v$(SHELLCHECK_VERSION)/shellcheck $$HOME/.local/bin/shellcheck; \
-		rm -rf /tmp/shellcheck.tar.xz /tmp/shellcheck-v$(SHELLCHECK_VERSION); \
-	}
-
-#deps-trivy: @ Install Trivy for CVE / secret / misconfiguration scanning
-deps-trivy:
-	@command -v trivy >/dev/null 2>&1 || { echo "Installing trivy v$(TRIVY_VERSION)..."; \
-		mkdir -p $$HOME/.local/bin; \
-		curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | \
-			sh -s -- -b $$HOME/.local/bin v$(TRIVY_VERSION); \
-	}
+	@command -v mise >/dev/null 2>&1 || { echo "Error: mise is required. Install via https://mise.jdx.dev"; exit 1; }
+	@mise install --yes
 
 #deps-check: @ Show Go version and mise tool status
 deps-check:
@@ -235,24 +173,33 @@ vulncheck: deps
 	@govulncheck ./...
 
 #secrets: @ Scan for hardcoded secrets (gitleaks)
-secrets: deps-gitleaks
+secrets: deps
 	@gitleaks detect --source . --verbose --redact --no-banner
 
 #trivy-fs: @ Scan filesystem for vulnerabilities, secrets, and misconfigurations
-trivy-fs: deps-trivy
+trivy-fs: deps
 	@trivy fs --scanners vuln,secret,misconfig --severity CRITICAL,HIGH --exit-code 1 .
 
 #trivy-config: @ Scan K8s manifests for security misconfigurations (KSV-*)
-trivy-config: deps-trivy
+trivy-config: deps
 	@trivy config --severity CRITICAL,HIGH --exit-code 1 k8s/
 
 #lint-ci: @ Lint GitHub Actions workflows (actionlint + shellcheck)
-lint-ci: deps-actionlint deps-shellcheck
+lint-ci: deps
 	@actionlint
 
 #mermaid-lint: @ Validate Mermaid diagrams in markdown files (Docker-based, portable)
 mermaid-lint:
 	@command -v docker >/dev/null 2>&1 || { echo "ERROR: docker is required for mermaid-lint"; exit 1; }
+	@# Pre-pull with retry so a Docker Hub flake doesn't masquerade as a parse error
+	@set -o pipefail; \
+	for attempt in 1 2 3; do \
+		if docker pull -q minlag/mermaid-cli:$(MERMAID_CLI_VERSION) >/dev/null 2>&1; then \
+			break; \
+		fi; \
+		[ "$$attempt" = 3 ] && { echo "ERROR: docker pull minlag/mermaid-cli:$(MERMAID_CLI_VERSION) failed after 3 attempts"; exit 1; }; \
+		sleep $$((attempt * 2)); \
+	done
 	@set -euo pipefail; \
 	MD_FILES=$$(grep -lF '```mermaid' README.md CLAUDE.md docs/*.md 2>/dev/null || true); \
 	if [ -z "$$MD_FILES" ]; then \
@@ -263,7 +210,7 @@ mermaid-lint:
 	for md in $$MD_FILES; do \
 		echo "Validating Mermaid blocks in $$md..."; \
 		LOG=$$(mktemp); \
-		if docker run --rm -v "$$PWD:/data" \
+		if docker run --rm -v "$$PWD:/data:ro" \
 			minlag/mermaid-cli:$(MERMAID_CLI_VERSION) \
 			-i "/data/$$md" -o "/tmp/$$(basename $$md .md).svg" >"$$LOG" 2>&1; then \
 			echo "  ✓ All blocks rendered cleanly."; \
@@ -322,13 +269,16 @@ ci: deps format static-check test integration-test build
 	@echo "Local CI pipeline passed."
 
 #ci-run: @ Run GitHub Actions workflow locally using act (jobs serialized, isolated artifact server)
-ci-run: deps-act
+ci-run: deps
 	@docker container prune -f 2>/dev/null || true
 	@ACT_PORT=$$(shuf -i 40000-59999 -n 1); \
 	ARTIFACT_PATH=$$(mktemp -d -t act-artifacts.XXXXXX); \
-	for j in docker-lint static-check build test integration-test; do \
+	for j in changes static-check build test integration-test; do \
 		echo "==== act push --job $$j ===="; \
-		act push --job $$j --container-architecture linux/amd64 \
+		act push --job $$j \
+			--pull=false \
+			-P ubuntu-24.04=catthehacker/ubuntu:$(ACT_UBUNTU_VERSION) \
+			--container-architecture linux/amd64 \
 			--artifact-server-port "$$ACT_PORT" \
 			--artifact-server-path "$$ARTIFACT_PATH" || exit 1; \
 	done
@@ -427,7 +377,7 @@ renovate-validate: renovate-bootstrap
 # =============================================================================
 
 #generate-env: @ Regenerate .env from pkg/config defaults
-generate-env:
+generate-env: deps
 	@go run ./cmd/generate-env
 
 #proto-gen: @ Regenerate gRPC code from .proto files (uses mise-pinned tool versions)
@@ -455,7 +405,7 @@ docker-push:
 	@docker push $(REGISTRY)/products:$(TAG)
 
 #docker-lint: @ Lint Dockerfiles with hadolint
-docker-lint: deps-hadolint
+docker-lint: deps
 	@hadolint Dockerfile.inventory Dockerfile.products
 
 # =============================================================================
@@ -466,7 +416,8 @@ docker-lint: deps-hadolint
 #
 #   kind-create     — create cluster + install LoadBalancer controller + install Dapr
 #   kind-deploy     — kind-create + k8s-deploy (full stack up)
-#   kind-destroy    — delete cluster + stop cloud-provider-kind container
+#   kind-destroy    — delete cluster + stop cloud-provider-kind container + prune
+#                     orphan kindccm-* sidecars
 #
 #   kind-up         — alias for kind-deploy (docker-compose-style "bring up the stack")
 #   kind-down       — alias for kind-destroy (docker-compose-style "tear it down")
@@ -479,8 +430,7 @@ docker-lint: deps-hadolint
 # IPAddressPool / L2Advertisement CRDs, no MetalLB release-track drift.
 
 #kind-create: @ Create local KinD cluster with cloud-provider-kind LoadBalancer controller + Dapr
-kind-create:
-	@command -v kind >/dev/null 2>&1 || { echo "Error: kind not installed. Run: go install sigs.k8s.io/kind@v$(KIND_VERSION)"; exit 1; }
+kind-create: deps
 	@command -v kubectl >/dev/null 2>&1 || { echo "Error: kubectl not installed. See: https://kubernetes.io/docs/tasks/tools/"; exit 1; }
 	@command -v dapr >/dev/null 2>&1 || { echo "Error: dapr CLI not installed. See https://docs.dapr.io/getting-started/install-dapr-cli/"; exit 1; }
 	@if kind get clusters 2>/dev/null | grep -q "^$(CLUSTER_NAME)$$"; then \
@@ -488,8 +438,13 @@ kind-create:
 		kubectl config use-context kind-$(CLUSTER_NAME); \
 	else \
 		kind create cluster --config=kind-config.yaml --name $(CLUSTER_NAME) \
-			--image=kindest/node:$(KIND_NODE_IMAGE) --wait 60s; \
+			--image=$(KIND_NODE_IMAGE) --wait 60s; \
 	fi
+	@$(MAKE) --no-print-directory kind-bootstrap
+
+#kind-bootstrap: @ Install cloud-provider-kind LoadBalancer + Dapr into existing KinD cluster (used by CI after helm/kind-action)
+kind-bootstrap:
+	@command -v dapr >/dev/null 2>&1 || { echo "Error: dapr CLI not installed. See https://docs.dapr.io/getting-started/install-dapr-cli/"; exit 1; }
 	@echo "=== Installing cloud-provider-kind (host-side LoadBalancer controller) ==="
 	@docker rm -f cloud-provider-kind >/dev/null 2>&1 || true
 	@docker run --rm -d \
@@ -503,9 +458,17 @@ kind-create:
 	@dapr dashboard -k -p 0 2>/dev/null &
 	@echo "=== KinD cluster ready ==="
 
-#kind-destroy: @ Delete KinD cluster and stop cloud-provider-kind
+#kind-destroy: @ Delete KinD cluster, stop cloud-provider-kind, prune kindccm orphans
 kind-destroy:
 	@docker rm -f cloud-provider-kind 2>/dev/null || true
+	@# Prune orphan kindccm-<hash> Envoy sidecars cloud-provider-kind spawns per
+	@# LoadBalancer Service. They survive `kind delete cluster` and silently
+	@# inherit kind-network IPs into the next run, producing first-curl resets.
+	@ORPHANS=$$(docker ps -aq --filter name=kindccm- 2>/dev/null); \
+	if [ -n "$$ORPHANS" ]; then \
+		echo "=== Pruning kindccm-* orphan sidecars ==="; \
+		docker rm -f $$ORPHANS >/dev/null 2>&1 || true; \
+	fi
 	@kind delete cluster --name $(CLUSTER_NAME) 2>/dev/null || true
 
 #kind-deploy: @ Create cluster, build/load images, apply manifests (full stack up)
@@ -522,43 +485,43 @@ k8s-deploy: docker-build
 	@kind load docker-image $(REGISTRY)/inventory:$(TAG) --name $(CLUSTER_NAME)
 	@kind load docker-image $(REGISTRY)/products:$(TAG) --name $(CLUSTER_NAME)
 	@echo "=== Applying K8s manifests ==="
-	@kubectl apply -f k8s/namespace.yaml
-	@kubectl apply -f k8s/rbac.yaml
-	@kubectl apply -f k8s/redis.yaml
-	@kubectl apply -f k8s/postgres.yaml
-	@kubectl apply -f k8s/zipkin.yaml
-	@kubectl apply -f k8s/dapr/
-	@kubectl apply -f k8s/inventory-deployment.yaml
-	@kubectl apply -f k8s/inventory-service.yaml
-	@kubectl apply -f k8s/products-deployment.yaml
-	@kubectl apply -f k8s/products-service.yaml
+	@$(KUBECTL) apply -f k8s/namespace.yaml
+	@$(KUBECTL) apply -f k8s/rbac.yaml
+	@$(KUBECTL) apply -f k8s/redis.yaml
+	@$(KUBECTL) apply -f k8s/postgres.yaml
+	@$(KUBECTL) apply -f k8s/zipkin.yaml
+	@$(KUBECTL) apply -f k8s/dapr/
+	@$(KUBECTL) apply -f k8s/inventory-deployment.yaml
+	@$(KUBECTL) apply -f k8s/inventory-service.yaml
+	@$(KUBECTL) apply -f k8s/products-deployment.yaml
+	@$(KUBECTL) apply -f k8s/products-service.yaml
 	@echo "=== Waiting for pods ==="
-	@kubectl rollout status deployment/redis -n $(NS_INFRA) --timeout=120s
-	@kubectl rollout status deployment/postgres -n $(NS_INFRA) --timeout=120s
-	@kubectl rollout status deployment/inventory -n $(NS_INVENTORY) --timeout=180s
-	@kubectl rollout status deployment/products -n $(NS_PRODUCTS) --timeout=180s
+	@$(KUBECTL) rollout status deployment/redis -n $(NS_INFRA) --timeout=120s
+	@$(KUBECTL) rollout status deployment/postgres -n $(NS_INFRA) --timeout=120s
+	@$(KUBECTL) rollout status deployment/inventory -n $(NS_INVENTORY) --timeout=180s
+	@$(KUBECTL) rollout status deployment/products -n $(NS_PRODUCTS) --timeout=180s
 
 #k8s-undeploy: @ Remove all K8s manifests
 k8s-undeploy:
-	@kubectl delete -f k8s/products-service.yaml --ignore-not-found
-	@kubectl delete -f k8s/products-deployment.yaml --ignore-not-found
-	@kubectl delete -f k8s/inventory-service.yaml --ignore-not-found
-	@kubectl delete -f k8s/inventory-deployment.yaml --ignore-not-found
-	@kubectl delete -f k8s/dapr/ --ignore-not-found
-	@kubectl delete -f k8s/zipkin.yaml --ignore-not-found
-	@kubectl delete -f k8s/postgres.yaml --ignore-not-found
-	@kubectl delete -f k8s/redis.yaml --ignore-not-found
-	@kubectl delete -f k8s/rbac.yaml --ignore-not-found
-	@kubectl delete -f k8s/namespace.yaml --ignore-not-found
+	@$(KUBECTL) delete -f k8s/products-service.yaml --ignore-not-found
+	@$(KUBECTL) delete -f k8s/products-deployment.yaml --ignore-not-found
+	@$(KUBECTL) delete -f k8s/inventory-service.yaml --ignore-not-found
+	@$(KUBECTL) delete -f k8s/inventory-deployment.yaml --ignore-not-found
+	@$(KUBECTL) delete -f k8s/dapr/ --ignore-not-found
+	@$(KUBECTL) delete -f k8s/zipkin.yaml --ignore-not-found
+	@$(KUBECTL) delete -f k8s/postgres.yaml --ignore-not-found
+	@$(KUBECTL) delete -f k8s/redis.yaml --ignore-not-found
+	@$(KUBECTL) delete -f k8s/rbac.yaml --ignore-not-found
+	@$(KUBECTL) delete -f k8s/namespace.yaml --ignore-not-found
 
 #k8s-status: @ Show pod and service status across all namespaces
 k8s-status:
 	@echo "=== Infrastructure ($(NS_INFRA)) ==="
-	@kubectl get pods,svc -n $(NS_INFRA) 2>/dev/null || true
+	@$(KUBECTL) get pods,svc -n $(NS_INFRA) 2>/dev/null || true
 	@echo "=== Inventory ($(NS_INVENTORY)) ==="
-	@kubectl get pods,svc -n $(NS_INVENTORY) 2>/dev/null || true
+	@$(KUBECTL) get pods,svc -n $(NS_INVENTORY) 2>/dev/null || true
 	@echo "=== Products ($(NS_PRODUCTS)) ==="
-	@kubectl get pods,svc -n $(NS_PRODUCTS) 2>/dev/null || true
+	@$(KUBECTL) get pods,svc -n $(NS_PRODUCTS) 2>/dev/null || true
 
 # =============================================================================
 # E2E
@@ -566,11 +529,11 @@ k8s-status:
 
 #e2e: @ Run end-to-end tests against running K8s cluster (default: sdk-http mode)
 e2e:
-	@./tests/e2e.sh
+	@KIND_CLUSTER_NAME=$(CLUSTER_NAME) ./tests/e2e.sh
 
 #e2e-all: @ Run end-to-end tests against all 4 client modes (sdk-http, sdk-grpc, custom-http, custom-grpc)
 e2e-all:
-	@./tests/e2e.sh all
+	@KIND_CLUSTER_NAME=$(CLUSTER_NAME) ./tests/e2e.sh all
 
 #e2e-setup: @ Alias for kind-deploy (create cluster + deploy everything)
 e2e-setup: kind-deploy
@@ -579,7 +542,7 @@ e2e-setup: kind-deploy
 e2e-teardown: k8s-undeploy kind-destroy
 
 .PHONY: help \
-	deps deps-act deps-hadolint deps-gitleaks deps-actionlint deps-shellcheck deps-trivy deps-check deps-prune deps-prune-check \
+	deps deps-check deps-prune deps-prune-check \
 	clean format build run test integration-test update \
 	lint sec vulncheck secrets trivy-fs trivy-config lint-ci mermaid-lint \
 	diagrams diagrams-clean diagrams-check \
@@ -590,6 +553,6 @@ e2e-teardown: k8s-undeploy kind-destroy
 	renovate-bootstrap renovate-validate \
 	generate-env proto-gen \
 	docker-build docker-push docker-lint \
-	kind-create kind-destroy kind-deploy kind-up kind-down \
+	kind-create kind-bootstrap kind-destroy kind-deploy kind-up kind-down \
 	k8s-deploy k8s-undeploy k8s-status \
 	e2e e2e-all e2e-setup e2e-teardown

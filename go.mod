@@ -4,7 +4,7 @@ go 1.26.2
 
 require (
 	github.com/cenkalti/backoff/v5 v5.0.3
-	github.com/dapr/dapr v1.17.4
+	github.com/dapr/dapr v1.17.6
 	github.com/dapr/go-sdk v1.14.2
 	github.com/go-logr/logr v1.4.3
 	github.com/gofiber/fiber/v3 v3.1.0
@@ -86,7 +86,7 @@ require (
 	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.42.0 // indirect
-	golang.org/x/text v0.35.0 // indirect
+	golang.org/x/text v0.36.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260316180232-0b37fe3546d5 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

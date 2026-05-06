@@ -27,7 +27,7 @@ Deployment_Node(host, "Developer laptop / CI runner", "Linux x86_64") {
 
     Deployment_Node(kind, "KinD cluster", "kindest/node:v1.35.1 (K8s 1.35)") {
 
-      Deployment_Node(dapr_sys, "Namespace: dapr-system", "dapr init -k --runtime-version 1.17.4") {
+      Deployment_Node(dapr_sys, "Namespace: dapr-system", "dapr init -k --runtime-version 1.17.6") {
         Container(dapr_cp, "Dapr control plane", "Operator, Sentry, Placement, Scheduler, Sidecar Injector")
       }
 
@@ -40,14 +40,14 @@ Deployment_Node(host, "Developer laptop / CI runner", "Linux x86_64") {
       Deployment_Node(inv_ns, "Namespace: dapr-go-hero-inventory") {
         Deployment_Node(inv_pod, "inventory Pod", "replicas=1, runAsNonRoot:10001") {
           Container(inv_app, "inventory", "Go 1.26.2, Fiber v3.1.0", "REST :3000; event handlers")
-          Container(inv_sidecar, "daprd", "Dapr 1.17.4 (injected)", "pub/sub, state, secrets, invoke; mTLS; retries; Zipkin traces")
+          Container(inv_sidecar, "daprd", "Dapr 1.17.6 (injected)", "pub/sub, state, secrets, invoke; mTLS; retries; Zipkin traces")
         }
       }
 
       Deployment_Node(prod_ns, "Namespace: dapr-go-hero-products", "accessControl defaultAction=deny; allow inventory") {
         Deployment_Node(prod_pod, "products Pod", "replicas=1, runAsNonRoot:10001") {
           Container(prod_app, "products", "Go 1.26.2, gRPC", "In-memory product store :50151")
-          Container(prod_sidecar, "daprd", "Dapr 1.17.4 (injected)", "Service invocation target; enforces ACL")
+          Container(prod_sidecar, "daprd", "Dapr 1.17.6 (injected)", "Service invocation target; enforces ACL")
         }
       }
     }

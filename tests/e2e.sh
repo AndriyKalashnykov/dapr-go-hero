@@ -17,10 +17,29 @@ NAMESPACE_INVENTORY="dapr-go-hero-inventory"
 NAMESPACE_PRODUCTS="dapr-go-hero-products"
 NAMESPACE_INFRA="dapr-go-hero"
 
+# Pin kubectl to the kind-<cluster> context so a parallel `make` run from a
+# sibling KinD-using project that calls `kubectl config use-context` cannot
+# silently flip our context mid-script. KIND_CLUSTER_NAME is exported by the
+# Makefile e2e target; default matches the project name when run by hand.
+KIND_CLUSTER_NAME="${KIND_CLUSTER_NAME:-dapr-go-hero}"
+KUBECTL=(kubectl --context="kind-${KIND_CLUSTER_NAME}")
+
 MODE="${1:-sdk-http}"
 PASS=0
 FAIL=0
 declare -a PF_PIDS=()
+
+# Pick a free local TCP port. Avoids collisions with concurrent runs of this
+# script (parallel CI matrix, two devs on the same host) that would otherwise
+# fight over hardcoded :3000/:3500/:9411 port-forward aliases.
+pick_port() {
+  python3 -c 'import socket; s=socket.socket(); s.bind(("",0)); print(s.getsockname()[1]); s.close()'
+}
+
+LOCAL_DAPR_PORT=$(pick_port)
+LOCAL_REST_PORT=$(pick_port)
+LOCAL_ZIPKIN_PORT=$(pick_port)
+echo "=== Allocated ephemeral local ports: dapr=${LOCAL_DAPR_PORT} rest=${LOCAL_REST_PORT} zipkin=${LOCAL_ZIPKIN_PORT} ==="
 
 cleanup() {
   local pid
@@ -95,13 +114,13 @@ patch_inventory_mode() {
   esac
 
   echo "=== Patching inventory Deployment to mode=${mode} args=${args} ==="
-  kubectl patch deployment/inventory -n "${NAMESPACE_INVENTORY}" --type=json \
+  "${KUBECTL[@]}" patch deployment/inventory -n "${NAMESPACE_INVENTORY}" --type=json \
     -p='[{"op":"add","path":"/spec/template/spec/containers/0/args","value":'"${args}"'}]' \
     >/dev/null 2>&1 || \
-  kubectl patch deployment/inventory -n "${NAMESPACE_INVENTORY}" --type=json \
+  "${KUBECTL[@]}" patch deployment/inventory -n "${NAMESPACE_INVENTORY}" --type=json \
     -p='[{"op":"replace","path":"/spec/template/spec/containers/0/args","value":'"${args}"'}]'
 
-  kubectl rollout status deployment/inventory -n "${NAMESPACE_INVENTORY}" --timeout=180s
+  "${KUBECTL[@]}" rollout status deployment/inventory -n "${NAMESPACE_INVENTORY}" --timeout=180s
 }
 
 # ---- single-mode run ------------------------------------------------------
@@ -123,36 +142,36 @@ run_mode() {
   echo "=== [${mode}] Waiting for rollouts to be ready ==="
   # Use rollout status (terminator-safe): waits for Deployment readiness
   # without tripping on old terminating pods that still match the label.
-  kubectl rollout status deployment/inventory -n "${NAMESPACE_INVENTORY}" --timeout=180s
-  kubectl rollout status deployment/products  -n "${NAMESPACE_PRODUCTS}"  --timeout=180s
+  "${KUBECTL[@]}" rollout status deployment/inventory -n "${NAMESPACE_INVENTORY}" --timeout=180s
+  "${KUBECTL[@]}" rollout status deployment/products  -n "${NAMESPACE_PRODUCTS}"  --timeout=180s
 
   # Resolve the current Running pod (filter out any still-terminating old pod)
   local inv_pod
-  inv_pod=$(kubectl get pod -n "${NAMESPACE_INVENTORY}" -l app=inventory \
+  inv_pod=$("${KUBECTL[@]}" get pod -n "${NAMESPACE_INVENTORY}" -l app=inventory \
     --field-selector=status.phase=Running \
     -o jsonpath='{.items[0].metadata.name}')
 
-  echo "=== [${mode}] Port-forward inventory Dapr sidecar ==="
-  kubectl port-forward "pod/${inv_pod}" 3500:3500 -n "${NAMESPACE_INVENTORY}" >/dev/null 2>&1 &
+  echo "=== [${mode}] Port-forward inventory Dapr sidecar (local :${LOCAL_DAPR_PORT} → :3500) ==="
+  "${KUBECTL[@]}" port-forward "pod/${inv_pod}" "${LOCAL_DAPR_PORT}:3500" -n "${NAMESPACE_INVENTORY}" >/dev/null 2>&1 &
   PF_PIDS+=($!)
-  wait_for_url "inventory sidecar :3500" "http://localhost:3500/v1.0/healthz" 30
+  wait_for_url "inventory sidecar :${LOCAL_DAPR_PORT}" "http://localhost:${LOCAL_DAPR_PORT}/v1.0/healthz" 30
 
   echo "=== [${mode}] Publishing events ==="
   local widget_desc="E2E Widget [${mode}]"
   local gadget_desc="E2E Gadget [${mode}]"
   local thing_desc="E2E Thingamajig [${mode}]"
 
-  curl -sf -X POST http://localhost:3500/v1.0/publish/pubsub/inventory \
+  curl -sf -X POST "http://localhost:${LOCAL_DAPR_PORT}/v1.0/publish/pubsub/inventory" \
     -H "Content-Type: application/cloudevents+json" \
     -d "{\"specversion\":\"1.0\",\"type\":\"widget.v1\",\"source\":\"e2e-test\",\"id\":\"e2e-widget-${mode}\",\"datacontenttype\":\"application/json\",\"data\":{\"id\":\"widget\",\"description\":\"${widget_desc}\",\"price\":9.99}}" \
     || { echo "FAIL: publish widget"; FAIL=$((FAIL+1)); }
 
-  curl -sf -X POST http://localhost:3500/v1.0/publish/pubsub/inventory \
+  curl -sf -X POST "http://localhost:${LOCAL_DAPR_PORT}/v1.0/publish/pubsub/inventory" \
     -H "Content-Type: application/cloudevents+json" \
     -d "{\"specversion\":\"1.0\",\"type\":\"gadget.v1\",\"source\":\"e2e-test\",\"id\":\"e2e-gadget-${mode}\",\"datacontenttype\":\"application/json\",\"data\":{\"id\":\"gadget\",\"description\":\"${gadget_desc}\",\"price\":19.99}}" \
     || { echo "FAIL: publish gadget"; FAIL=$((FAIL+1)); }
 
-  curl -sf -X POST http://localhost:3500/v1.0/publish/pubsub/inventory \
+  curl -sf -X POST "http://localhost:${LOCAL_DAPR_PORT}/v1.0/publish/pubsub/inventory" \
     -H "Content-Type: application/cloudevents+json" \
     -d "{\"specversion\":\"1.0\",\"type\":\"thingamajig.v1\",\"source\":\"e2e-test\",\"id\":\"e2e-thing-${mode}\",\"datacontenttype\":\"application/json\",\"data\":{\"id\":\"thingamajig\",\"description\":\"${thing_desc}\",\"price\":29.99}}" \
     || { echo "FAIL: publish thingamajig"; FAIL=$((FAIL+1)); }
@@ -161,7 +180,7 @@ run_mode() {
   # Dapr should reject with a 4xx/5xx and the API should return 404 for the event's id.
   local malformed_status
   malformed_status=$(curl -s -o /dev/null -w '%{http_code}' --max-time ${CURL_TIMEOUT} \
-    -X POST http://localhost:3500/v1.0/publish/pubsub/inventory \
+    -X POST "http://localhost:${LOCAL_DAPR_PORT}/v1.0/publish/pubsub/inventory" \
     -H "Content-Type: application/cloudevents+json" \
     -d '{"specversion":"1.0","type":"widget.v1","source":"e2e","id":"malformed","datacontenttype":"application/json","data":"not-an-object"}' \
     2>/dev/null || echo "000")
@@ -171,11 +190,11 @@ run_mode() {
   echo "=== [${mode}] Waiting for async processing ==="
   sleep 10
 
-  echo "=== [${mode}] Port-forward inventory REST API ==="
-  kubectl port-forward svc/inventory 3000:3000 -n "${NAMESPACE_INVENTORY}" >/dev/null 2>&1 &
+  echo "=== [${mode}] Port-forward inventory REST API (local :${LOCAL_REST_PORT} → :3000) ==="
+  "${KUBECTL[@]}" port-forward svc/inventory "${LOCAL_REST_PORT}:3000" -n "${NAMESPACE_INVENTORY}" >/dev/null 2>&1 &
   PF_PIDS+=($!)
-  wait_for_url "inventory REST :3000" "http://localhost:3000/v1/widgets/widget" 30
-  local base="http://localhost:3000"
+  wait_for_url "inventory REST :${LOCAL_REST_PORT}" "http://localhost:${LOCAL_REST_PORT}/v1/widgets/widget" 30
+  local base="http://localhost:${LOCAL_REST_PORT}"
 
   echo "=== [${mode}] Testing REST API ==="
   assert_status   "GET /v1/widgets/widget"     "${base}/v1/widgets/widget" "200"
@@ -197,17 +216,17 @@ run_mode() {
 
 check_zipkin() {
   local inv_pod
-  if ! kubectl get svc zipkin -n "${NAMESPACE_INFRA}" >/dev/null 2>&1; then
+  if ! "${KUBECTL[@]}" get svc zipkin -n "${NAMESPACE_INFRA}" >/dev/null 2>&1; then
     echo "  WARN: Zipkin service not found — skipping trace assertions"
     return
   fi
 
-  kubectl port-forward svc/zipkin 9411:9411 -n "${NAMESPACE_INFRA}" >/dev/null 2>&1 &
+  "${KUBECTL[@]}" port-forward svc/zipkin "${LOCAL_ZIPKIN_PORT}:9411" -n "${NAMESPACE_INFRA}" >/dev/null 2>&1 &
   PF_PIDS+=($!)
-  wait_for_url "Zipkin :9411" "http://localhost:9411/health" 20 || return
+  wait_for_url "Zipkin :${LOCAL_ZIPKIN_PORT}" "http://localhost:${LOCAL_ZIPKIN_PORT}/health" 20 || return
 
   local trace_count
-  trace_count=$(curl -sf "http://localhost:9411/api/v2/traces?limit=50" 2>/dev/null \
+  trace_count=$(curl -sf "http://localhost:${LOCAL_ZIPKIN_PORT}/api/v2/traces?limit=50" 2>/dev/null \
     | jq 'length' 2>/dev/null || echo "0")
 
   if [[ "${trace_count}" -gt 0 ]]; then
@@ -221,7 +240,7 @@ check_zipkin() {
   # Assert at least one span per app-id. The serviceName in Zipkin is the
   # Dapr app-id, so both "inventory" and "products" should appear.
   local services
-  services=$(curl -sf "http://localhost:9411/api/v2/services" 2>/dev/null || echo "[]")
+  services=$(curl -sf "http://localhost:${LOCAL_ZIPKIN_PORT}/api/v2/services" 2>/dev/null || echo "[]")
   for svc in inventory products; do
     if echo "${services}" | jq -e --arg s "${svc}" 'index($s)' >/dev/null 2>&1; then
       echo "  PASS: Zipkin records traces for app-id '${svc}'"
@@ -253,32 +272,32 @@ check_zipkin() {
 # recovery signal the resiliency policy and topology guard.
 check_resiliency() {
   echo "=== Resiliency: scaling products to 0 ==="
-  kubectl scale deployment/products -n "${NAMESPACE_PRODUCTS}" --replicas=0
-  kubectl wait pods -n "${NAMESPACE_PRODUCTS}" -l app=products \
+  "${KUBECTL[@]}" scale deployment/products -n "${NAMESPACE_PRODUCTS}" --replicas=0
+  "${KUBECTL[@]}" wait pods -n "${NAMESPACE_PRODUCTS}" -l app=products \
     --for=delete --timeout=60s 2>/dev/null || true
 
   echo "=== Resiliency: restoring products ==="
-  kubectl scale deployment/products -n "${NAMESPACE_PRODUCTS}" --replicas=1
-  kubectl rollout status deployment/products -n "${NAMESPACE_PRODUCTS}" --timeout=120s
+  "${KUBECTL[@]}" scale deployment/products -n "${NAMESPACE_PRODUCTS}" --replicas=1
+  "${KUBECTL[@]}" rollout status deployment/products -n "${NAMESPACE_PRODUCTS}" --timeout=120s
 
   # Port-forward inventory sidecar for the post-recovery publish
   local inv_pod
-  inv_pod=$(kubectl get pod -n "${NAMESPACE_INVENTORY}" -l app=inventory \
+  inv_pod=$("${KUBECTL[@]}" get pod -n "${NAMESPACE_INVENTORY}" -l app=inventory \
     --field-selector=status.phase=Running \
     -o jsonpath='{.items[0].metadata.name}')
-  kubectl port-forward "pod/${inv_pod}" 3500:3500 -n "${NAMESPACE_INVENTORY}" >/dev/null 2>&1 &
+  "${KUBECTL[@]}" port-forward "pod/${inv_pod}" "${LOCAL_DAPR_PORT}:3500" -n "${NAMESPACE_INVENTORY}" >/dev/null 2>&1 &
   PF_PIDS+=($!)
-  wait_for_url "inventory sidecar (resiliency)" "http://localhost:3500/v1.0/healthz" 30 || return
+  wait_for_url "inventory sidecar (resiliency)" "http://localhost:${LOCAL_DAPR_PORT}/v1.0/healthz" 30 || return
 
   local resil_desc="E2E Resiliency Thingamajig Post-Recovery"
-  curl -sf -X POST http://localhost:3500/v1.0/publish/pubsub/inventory \
+  curl -sf -X POST "http://localhost:${LOCAL_DAPR_PORT}/v1.0/publish/pubsub/inventory" \
     -H "Content-Type: application/cloudevents+json" \
     -d "{\"specversion\":\"1.0\",\"type\":\"thingamajig.v1\",\"source\":\"e2e\",\"id\":\"resil-thing-post\",\"datacontenttype\":\"application/json\",\"data\":{\"id\":\"resil-thing-post\",\"description\":\"${resil_desc}\",\"price\":77.77}}" \
     || { echo "  FAIL: publish post-recovery"; FAIL=$((FAIL+1)); return; }
 
   echo "  Polling up to 30s for post-recovery event to process..."
-  local base="http://localhost:3000"
-  kubectl port-forward svc/inventory 3000:3000 -n "${NAMESPACE_INVENTORY}" >/dev/null 2>&1 &
+  local base="http://localhost:${LOCAL_REST_PORT}"
+  "${KUBECTL[@]}" port-forward svc/inventory "${LOCAL_REST_PORT}:3000" -n "${NAMESPACE_INVENTORY}" >/dev/null 2>&1 &
   PF_PIDS+=($!)
   sleep 2
 
@@ -308,7 +327,7 @@ check_resiliency() {
 check_access_control() {
   echo "=== Access control ==="
   local default_action
-  default_action=$(kubectl get configuration dapr-config -n "${NAMESPACE_PRODUCTS}" \
+  default_action=$("${KUBECTL[@]}" get configuration dapr-config -n "${NAMESPACE_PRODUCTS}" \
     -o jsonpath='{.spec.accessControl.defaultAction}' 2>/dev/null || echo "")
   if [[ "${default_action}" == "deny" ]]; then
     echo "  PASS: products defaultAction=deny (ACL enforces allowlist)"
@@ -319,7 +338,7 @@ check_access_control() {
   fi
 
   local allowed
-  allowed=$(kubectl get configuration dapr-config -n "${NAMESPACE_PRODUCTS}" \
+  allowed=$("${KUBECTL[@]}" get configuration dapr-config -n "${NAMESPACE_PRODUCTS}" \
     -o jsonpath='{.spec.accessControl.policies[?(@.appId=="inventory")].appId}' 2>/dev/null || echo "")
   if [[ "${allowed}" == "inventory" ]]; then
     echo "  PASS: inventory is explicitly allowlisted"

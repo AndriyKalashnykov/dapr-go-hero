@@ -4,19 +4,7 @@ on:
   push:
     branches: [main]
     tags: ['v*']
-    paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
-      - 'LICENSE'
-      - '.gitignore'
-      - '.claude/**'
   pull_request:
-    paths-ignore:
-      - '**/*.md'
-      - 'docs/**'
-      - 'LICENSE'
-      - '.gitignore'
-      - '.claude/**'
   workflow_call:
 
 concurrency:
@@ -25,17 +13,62 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
 
+  # `changes` is the path-filter detector. It runs on every event and decides
+  # whether the rest of the workflow has anything to do. Doc-only changes set
+  # outputs.code to 'false', and downstream jobs short-circuit. This shape is
+  # Repository-Rulesets-safe: every event creates a workflow run (so the
+  # required `ci-pass` aggregator always reports), but only meaningful changes
+  # spend CI minutes.
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+      e2e: ${{ steps.filter.outputs.e2e }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Filter changed paths
+        id: filter
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        with:
+          # `base` is silently ignored on pull_request events (PR head is the
+          # natural base) — set it only on push events so act-based local CI
+          # runs (`make ci-run` invokes `act push`) still work.
+          base: ${{ github.event_name == 'push' && 'main' || '' }}
+          filters: |
+            code:
+              - '!(**.md|docs/**|specs/**|LICENSE|.gitignore|.claudeignore|.claude/**|benchmarks/**|**.png|**.jpg|**.gif|**.svg)'
+              - 'CLAUDE.md'
+            e2e:
+              - 'cmd/**'
+              - 'pkg/**'
+              - 'proto/**'
+              - 'k8s/**'
+              - 'tests/**'
+              - 'components/**'
+              - 'Dockerfile.*'
+              - 'Makefile'
+              - '.mise.toml'
+              - 'go.mod'
+              - 'go.sum'
+              - '.github/workflows/ci.yml'
+
   static-check:
+    needs: [changes]
+    if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Set up toolchain
+      - name: Set up Go
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:
           cache: true
@@ -44,14 +77,15 @@ jobs:
         run: make static-check
 
   build:
-    needs: [static-check]
+    needs: [changes, static-check]
+    if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Set up toolchain
+      - name: Set up Go
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:
           cache: true
@@ -60,14 +94,15 @@ jobs:
         run: make build
 
   test:
-    needs: [static-check]
+    needs: [changes, static-check]
+    if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Set up toolchain
+      - name: Set up Go
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:
           cache: true
@@ -76,110 +111,114 @@ jobs:
         run: make test
 
   integration-test:
-    needs: [static-check]
+    needs: [changes, static-check]
+    if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Set up toolchain
+      - name: Set up Go
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:
           cache: true
 
-      # Uses Testcontainers to spin a real PostgreSQL
-      - name: Integration test
+      - name: Test
         run: make integration-test
 
+  # Build container images locally and Trivy-scan them. The project doesn't
+  # publish images today (see CLAUDE.md), so this is a pre-push quality gate
+  # only — it catches CVEs in the alpine base layer or our own files before
+  # they regress.
+  docker:
+    needs: [changes, static-check]
+    if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Set up Go
+        uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
+        with:
+          cache: true
+
+      - name: Build
+        run: make docker-build
+
+      - name: Scan inventory image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: dapr-go-hero/inventory:dev
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+          ignore-unfixed: true
+
+      - name: Scan products image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: dapr-go-hero/products:dev
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+          ignore-unfixed: true
+
   e2e:
-    needs: [build, test]
+    needs: [changes, build, test]
+    if: ${{ !failure() && !cancelled() && (needs.changes.outputs.e2e == 'true' || contains(github.event.pull_request.labels.*.name, 'run-e2e')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Set up toolchain
+      - name: Set up Go
         uses: jdx/mise-action@1648a7812b9aeae629881980618f079932869151 # v4.0.1
         with:
           cache: true
 
-      - name: Create KinD cluster
+      - name: Set up KinD cluster
         uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc # v1.14.0
         with:
+          # renovate: datasource=github-releases depName=kubernetes-sigs/kind
           version: v0.31.0
           cluster_name: dapr-go-hero
           config: ./kind-config.yaml
+          # renovate: datasource=docker depName=kindest/node
           node_image: kindest/node:v1.35.1
 
-      # cloud-provider-kind runs on the host (not in the cluster). It watches
-      # Services of type LoadBalancer and allocates IPs on the 'kind' Docker
-      # network. Kind-team maintained, works on any supported kindest/node
-      # version. Replaces MetalLB.
-      - name: Install cloud-provider-kind
-        run: |
-          docker run --rm -d \
-            --name cloud-provider-kind \
-            --network kind \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            registry.k8s.io/cloud-provider-kind/cloud-controller-manager:v0.10.0
-
-      - name: Install Dapr
+      - name: Install Dapr CLI
+        # dapr/setup-dapr publishes only `v1`/`v2` tags upstream (no semver). The
+        # SHA pin makes `# v2` precise, even though the tag is moving.
         uses: dapr/setup-dapr@8d980918fd43a2765c143ce7f687665b2d46a6b9 # v2
         with:
-          # Dapr CLI version (not runtime). CLI v1.17.1 is the latest dapr/cli release.
-          # Runtime (sidecar) version is pinned separately in Makefile as DAPR_RUNTIME_VERSION
-          # and passed to `dapr init -k --runtime-version`.
+          # renovate: datasource=github-releases depName=dapr/cli
           version: '1.17.1'
 
-      - name: Initialize Dapr on cluster
-        run: dapr init -k --wait --timeout 300
-
-      - name: Build and load images
-        run: |
-          make docker-build
-          kind load docker-image dapr-go-hero/inventory:dev --name dapr-go-hero
-          kind load docker-image dapr-go-hero/products:dev --name dapr-go-hero
+      - name: Set up cloud-provider-kind + Dapr runtime
+        run: make kind-bootstrap
 
       - name: Deploy to KinD
-        run: |
-          kubectl apply -f k8s/namespace.yaml
-          kubectl apply -f k8s/rbac.yaml
-          kubectl apply -f k8s/redis.yaml
-          kubectl apply -f k8s/postgres.yaml
-          kubectl apply -f k8s/zipkin.yaml
-          kubectl apply -f k8s/dapr/
-          kubectl apply -f k8s/inventory-deployment.yaml
-          kubectl apply -f k8s/inventory-service.yaml
-          kubectl apply -f k8s/products-deployment.yaml
-          kubectl apply -f k8s/products-service.yaml
-          kubectl rollout status deployment/redis -n dapr-go-hero --timeout=120s
-          kubectl rollout status deployment/postgres -n dapr-go-hero --timeout=120s
-          kubectl rollout status deployment/inventory -n dapr-go-hero-inventory --timeout=180s
-          kubectl rollout status deployment/products -n dapr-go-hero-products --timeout=180s
+        run: make k8s-deploy
 
-      # Runs across all 4 client modes: sdk-http, sdk-grpc, custom-http, custom-grpc
-      - name: Run E2E tests
+      # Runs across all 4 client modes: sdk-http, sdk-grpc, custom-http, custom-grpc.
+      - name: Test
         run: make e2e-all
 
       - name: Debug on failure
+        # Best-effort log dump; failures here must not mask the real e2e failure
+        # so we run k8s-status which itself tolerates missing namespaces.
         if: failure()
-        run: |
-          echo "=== Pod status ==="
-          kubectl get pods -A
-          echo "=== Inventory logs ==="
-          kubectl logs -n dapr-go-hero-inventory -l app=inventory --all-containers --tail=50 || true
-          echo "=== Products logs ==="
-          kubectl logs -n dapr-go-hero-products -l app=products --all-containers --tail=50 || true
+        run: make k8s-status
 
   ci-pass:
-    needs: [static-check, build, test, integration-test, e2e]
+    needs: [changes, static-check, build, test, integration-test, docker, e2e]
     runs-on: ubuntu-24.04
     timeout-minutes: 1
     if: always()
     steps:
-      - name: Check all jobs succeeded
+      - name: Verify all jobs succeeded or were skipped
         run: |
           if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
             echo "One or more CI jobs failed."
@@ -189,4 +228,4 @@ jobs:
             echo "One or more CI jobs were cancelled."
             exit 1
           fi
-          echo "All CI jobs passed."
+          echo "All CI jobs passed (or were skipped via path-filter)."
