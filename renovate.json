@@ -4,7 +4,7 @@
     "config:best-practices",
     ":semanticCommitType(chore)"
   ],
-  "enabledManagers": ["gomod", "github-actions", "dockerfile", "kubernetes", "custom.regex"],
+  "enabledManagers": ["gomod", "github-actions", "dockerfile", "kubernetes", "mise", "custom.regex"],
   "kubernetes": {
     "managerFilePatterns": ["/^k8s/.+\\.ya?ml$/"]
   },
@@ -43,18 +43,18 @@
     },
     {
       "customType": "regex",
-      "description": "Update .mise.toml tool pins via inline renovate comments",
-      "managerFilePatterns": ["/^\\.mise\\.toml$/"],
-      "matchStrings": [
-        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)( extractVersion=(?<extractVersion>[^\\s]+))?( versioning=(?<versioning>[^\\s]+))?\\n[a-zA-Z_-]+\\s*=\\s*\"(?<currentValue>[^\"]+)\""
-      ]
-    },
-    {
-      "customType": "regex",
       "description": "Update GitHub Actions workflow `with:` value pins via inline renovate comments (e.g., dapr/setup-dapr@v2 with: version)",
       "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)( versioning=(?<versioning>[^\\s]+))?\\n\\s*[a-zA-Z_]+:\\s*['\"]?(?<currentValue>[^'\"\\s]+)['\"]?"
+      ]
+    },
+    {
+      "customType": "regex",
+      "description": "Update shell script tool versions via inline renovate comments (e.g., tests/e2e.sh CURL_IMAGE_VERSION)",
+      "managerFilePatterns": ["/^(scripts|tests)/.+\\.sh$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)( versioning=(?<versioning>[^\\s]+))?\\n[A-Z_]+\\s*=\\s*[\"'](?<currentValue>[^\"']+)[\"']"
       ]
     }
   ],

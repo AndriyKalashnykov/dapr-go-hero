@@ -27,7 +27,7 @@ Reference implementation of a Go microservice platform on [Dapr](https://dapr.io
 | Test layers | Unit (Go testing), Integration (Testcontainers), E2E (KinD + curl) | Each layer catches a different class of defect |
 | Tool versioning | [mise](https://mise.jdx.dev) | Single source of truth for every CLI: Go, kind, golangci-lint, gosec, hadolint, trivy, gitleaks, actionlint, shellcheck, act, protoc, protoc-gen-* — pinned in `.mise.toml`, installed by `make deps` |
 | Code quality | golangci-lint, gosec, hadolint, mermaid-cli | Enforced via composite `make static-check` gate |
-| Dependency updates | [Renovate](https://docs.renovatebot.com/) | Built-in `gomod` / `github-actions` / `dockerfile` / `kubernetes` managers + custom-regex coverage of Makefile, `.mise.toml`, and workflow `with:` pins |
+| Dependency updates | [Renovate](https://docs.renovatebot.com/) | Built-in `gomod` / `github-actions` / `dockerfile` / `kubernetes` / `mise` managers + custom-regex coverage of Makefile constants, workflow `with:` pins, and `tests/*.sh` image pins |
 
 ## Building Blocks Demonstrated
 
@@ -501,7 +501,7 @@ The `changes` job uses the canonical path-filter expression so doc-only changes 
 
 No custom secrets required — CI uses only the implicit `GITHUB_TOKEN`.
 
-[Renovate](https://docs.renovatebot.com/) auto-merges minor/patch updates after CI passes (3-day minimum release age on majors). Coverage spans the built-in `gomod` / `github-actions` / `dockerfile` / `kubernetes` managers plus three custom-regex managers for Makefile constants, `.mise.toml` tool pins, and workflow `with:` value pins.
+[Renovate](https://docs.renovatebot.com/) auto-merges minor/patch updates after CI passes (3-day minimum release age on majors). Coverage spans the built-in `gomod` / `github-actions` / `dockerfile` / `kubernetes` / `mise` managers plus three custom-regex managers for Makefile constants, workflow `with:` value pins, and `tests/*.sh` shell-script image pins. Dapr SDK and Go-toolchain bumps are grouped into single PRs to avoid concurrent-update collisions.
 
 A scheduled workflow (`.github/workflows/cleanup-runs.yml`) removes workflow runs older than 7 days weekly (retains last 5 regardless of age).
 
