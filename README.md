@@ -481,14 +481,14 @@ Buildkit in-manifest attestations (`provenance` + `sbom`) are deliberately disab
 **Pull a published image:**
 
 ```bash
-docker pull ghcr.io/AndriyKalashnykov/dapr-go-hero/inventory:latest
-docker pull ghcr.io/AndriyKalashnykov/dapr-go-hero/products:latest
+docker pull ghcr.io/andriykalashnykov/dapr-go-hero/inventory:latest
+docker pull ghcr.io/andriykalashnykov/dapr-go-hero/products:latest
 ```
 
 **Verify the cosign signature:**
 
 ```bash
-cosign verify ghcr.io/AndriyKalashnykov/dapr-go-hero/inventory:<tag> \
+cosign verify ghcr.io/andriykalashnykov/dapr-go-hero/inventory:<tag> \
   --certificate-identity-regexp 'https://github\.com/AndriyKalashnykov/dapr-go-hero/.+' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
