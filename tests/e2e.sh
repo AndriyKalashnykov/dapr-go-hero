@@ -17,6 +17,12 @@ NAMESPACE_INVENTORY="dapr-go-hero-inventory"
 NAMESPACE_PRODUCTS="dapr-go-hero-products"
 NAMESPACE_INFRA="dapr-go-hero"
 
+# Image used by the access-control probe pod (check_access_control_enforcement).
+# Pinned + Renovate-tracked so it doesn't silently go stale; a renovate.json
+# custom.regex over tests/*.sh picks up this annotation.
+# renovate: datasource=docker depName=curlimages/curl
+CURL_IMAGE_VERSION="8.10.1"
+
 # Pin kubectl to the kind-<cluster> context so a parallel `make` run from a
 # sibling KinD-using project that calls `kubectl config use-context` cannot
 # silently flip our context mid-script. KIND_CLUSTER_NAME is exported by the
@@ -447,7 +453,7 @@ spec:
   serviceAccountName: inventory
   containers:
     - name: curl
-      image: curlimages/curl:8.10.1
+      image: curlimages/curl:${CURL_IMAGE_VERSION}
       command: ["sleep", "180"]
 EOF
 
