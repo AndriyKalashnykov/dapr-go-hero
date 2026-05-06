@@ -133,11 +133,12 @@ func TestGetProduct_NotFound(t *testing.T) {
 func TestRunServer_ServesAndShutsDown(t *testing.T) {
 	t.Parallel()
 
-	// Bind first to discover the free port, then close so runServer can
-	// re-bind. (We can't pass the listener into runServer without
-	// changing its signature; the bind+close+rebind pattern is the
-	// canonical workaround for "give me an ephemeral port the callee
-	// will then bind.")
+	// Probe-bind to discover a free port, then close so runServer can
+	// re-bind. There IS a TIME_WAIT race window between probe.Close and
+	// runServer's lc.Listen — observed once on CI. The retry loop below
+	// (around the SaveProduct call) covers it: the test only fails if
+	// the server is genuinely unreachable for ~3s, not for one
+	// transient "connection refused" right after bind.
 	lc := &net.ListenConfig{}
 	probe, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
@@ -152,20 +153,36 @@ func TestRunServer_ServesAndShutsDown(t *testing.T) {
 	serveDone := make(chan error, 1)
 	go func() { serveDone <- runServer(ctx, addr) }()
 
-	// Wait for the server to start accepting; gRPC dial with WithBlock
-	// would loop forever on its own, so cap the wait.
+	// Wait for runServer's actual TCP listener to come up. Real net.Dial
+	// proves the server is bound — grpc.NewClient is lazy-connect and
+	// would succeed even with no server, masking the race.
 	dialCtx, dialCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer dialCancel()
-	var conn *grpc.ClientConn
 	for {
 		if dialCtx.Err() != nil {
-			t.Fatalf("dial timeout: %v", dialCtx.Err())
+			// Drain runServer's error to surface the real cause.
+			cancel()
+			select {
+			case rsErr := <-serveDone:
+				t.Fatalf("dial timeout: %v; runServer returned: %v", dialCtx.Err(), rsErr)
+			case <-time.After(2 * time.Second):
+				t.Fatalf("dial timeout: %v; runServer did not return", dialCtx.Err())
+			}
 		}
-		conn, err = grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err == nil {
+		dialer := &net.Dialer{Timeout: 200 * time.Millisecond}
+		probeCtx, probeCancel := context.WithTimeout(dialCtx, 200*time.Millisecond)
+		c, derr := dialer.DialContext(probeCtx, "tcp", addr)
+		probeCancel()
+		if derr == nil {
+			_ = c.Close()
 			break
 		}
 		time.Sleep(50 * time.Millisecond)
+	}
+
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatalf("NewClient: %v", err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
 
