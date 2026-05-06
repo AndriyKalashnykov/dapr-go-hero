@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"net"
 	"sync"
 	"testing"
+	"time"
 
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
 	pb "github.com/AndriyKalashnykov/dapr-go-hero/proto/products"
@@ -118,6 +122,87 @@ func TestGetProduct_NotFound(t *testing.T) {
 	}
 	if st.Code() != codes.NotFound {
 		t.Errorf("code = %v, want NotFound", st.Code())
+	}
+}
+
+// TestRunServer_ServesAndShutsDown verifies the extracted runServer
+// entrypoint binds an ephemeral port (avoiding any 50151 collision with
+// a real Dapr setup or sibling test runs), serves gRPC requests, and
+// shuts down cleanly when ctx is canceled. Uses 127.0.0.1:0 so the
+// kernel picks a free port — no hardcoded value.
+func TestRunServer_ServesAndShutsDown(t *testing.T) {
+	t.Parallel()
+
+	// Bind first to discover the free port, then close so runServer can
+	// re-bind. (We can't pass the listener into runServer without
+	// changing its signature; the bind+close+rebind pattern is the
+	// canonical workaround for "give me an ephemeral port the callee
+	// will then bind.")
+	lc := &net.ListenConfig{}
+	probe, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("probe listen: %v", err)
+	}
+	addr := probe.Addr().String()
+	_ = probe.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	serveDone := make(chan error, 1)
+	go func() { serveDone <- runServer(ctx, addr) }()
+
+	// Wait for the server to start accepting; gRPC dial with WithBlock
+	// would loop forever on its own, so cap the wait.
+	dialCtx, dialCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer dialCancel()
+	var conn *grpc.ClientConn
+	for {
+		if dialCtx.Err() != nil {
+			t.Fatalf("dial timeout: %v", dialCtx.Err())
+		}
+		conn, err = grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		if err == nil {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	// Round-trip a SaveProduct + GetProduct to prove the wiring is real.
+	client := pb.NewProductsClient(conn)
+	if _, err := client.SaveProduct(context.Background(), &pb.Product{
+		Id: "p-1", Description: "test", Price: 1.23,
+	}); err != nil {
+		t.Fatalf("SaveProduct: %v", err)
+	}
+	got, err := client.GetProduct(context.Background(), &pb.ProductRequest{Id: "p-1"})
+	if err != nil {
+		t.Fatalf("GetProduct: %v", err)
+	}
+	if got.Description != "test" || got.Price != 1.23 {
+		t.Errorf("got %+v", got)
+	}
+
+	// Cancel ctx and verify runServer returns nil within a bounded time.
+	cancel()
+	select {
+	case err := <-serveDone:
+		if err != nil {
+			t.Errorf("runServer returned error on cancel: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("runServer did not shut down within 5s after ctx cancel")
+	}
+}
+
+func TestRunServer_FailsOnBadAddr(t *testing.T) {
+	t.Parallel()
+
+	// "x" is not a valid TCP address — Listen rejects it before any goroutine starts.
+	err := runServer(context.Background(), "not-a-valid-addr")
+	if err == nil {
+		t.Fatal("expected error for invalid address")
 	}
 }
 

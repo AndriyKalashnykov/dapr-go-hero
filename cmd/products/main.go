@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net"
+	"os"
 	"sync"
 
 	"google.golang.org/grpc"
@@ -51,16 +53,48 @@ func (s *server) SaveProduct(ctx context.Context, product *pb.Product) (*emptypb
 	return &emptypb.Empty{}, nil
 }
 
-func main() {
+// runServer is the testable entrypoint extracted from main per
+// /test-coverage-analysis Pattern C. It accepts an explicit listen address
+// (so tests can pass `127.0.0.1:0` and pick a free port without flag
+// parsing) and a context used to drive shutdown — when ctx is canceled,
+// the gRPC server is gracefully stopped.
+func runServer(ctx context.Context, addr string) error {
 	lc := &net.ListenConfig{}
-	lis, err := lc.Listen(context.Background(), "tcp", config.ProductsAddr) // #nosec G102 -- bound to 0.0.0.0 for K8s; configurable via PRODUCTS_ADDR
+	lis, err := lc.Listen(ctx, "tcp", addr) // #nosec G102 -- caller chooses bind address; tests use 127.0.0.1:0
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		return err
 	}
 	s := grpc.NewServer()
 	pb.RegisterProductsServer(s, newServer())
 	log.Printf("server listening at %v", lis.Addr())
-	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
+
+	// Shutdown when ctx is canceled.
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- s.Serve(lis) }()
+
+	select {
+	case err := <-serveErr:
+		return err
+	case <-ctx.Done():
+		s.GracefulStop()
+		// Drain Serve's eventual return value.
+		if err := <-serveErr; err != nil && !errors.Is(err, grpc.ErrServerStopped) {
+			return err
+		}
+		return nil
+	}
+}
+
+func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	// Explicit cleanup before os.Exit (gocritic exitAfterDefer).
+	exitCode := 0
+	if err := runServer(ctx, config.ProductsAddr); err != nil {
+		log.Printf("runServer: %v", err)
+		exitCode = 1
+	}
+	cancel()
+	if exitCode != 0 {
+		os.Exit(exitCode)
 	}
 }

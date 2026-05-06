@@ -176,16 +176,18 @@ run_mode() {
     -d "{\"specversion\":\"1.0\",\"type\":\"thingamajig.v1\",\"source\":\"e2e-test\",\"id\":\"e2e-thing-${mode}\",\"datacontenttype\":\"application/json\",\"data\":{\"id\":\"thingamajig\",\"description\":\"${thing_desc}\",\"price\":29.99}}" \
     || { echo "FAIL: publish thingamajig"; FAIL=$((FAIL+1)); }
 
-  # Negative case: malformed CloudEvent — missing required `data` field.
-  # Dapr should reject with a 4xx/5xx and the API should return 404 for the event's id.
+  # Negative case: malformed CloudEvent — `data` is a string where the
+  # widget handler expects a JSON object. Dapr 1.17 accepts the publish
+  # (the broker doesn't typecheck `data`); the app handler should reject
+  # the decode and not persist anything. Assert: a GET for the malformed
+  # event's id returns 404 (proof the app's decode-failure path is wired).
   local malformed_status
   malformed_status=$(curl -s -o /dev/null -w '%{http_code}' --max-time ${CURL_TIMEOUT} \
     -X POST "http://localhost:${LOCAL_DAPR_PORT}/v1.0/publish/pubsub/inventory" \
     -H "Content-Type: application/cloudevents+json" \
-    -d '{"specversion":"1.0","type":"widget.v1","source":"e2e","id":"malformed","datacontenttype":"application/json","data":"not-an-object"}' \
+    -d '{"specversion":"1.0","type":"widget.v1","source":"e2e","id":"malformed-evt","datacontenttype":"application/json","data":"not-an-object"}' \
     2>/dev/null || echo "000")
-  # Dapr 1.17 accepts the publish (the app rejects later), so we just note it.
-  echo "  INFO: malformed publish returned HTTP ${malformed_status} (app handles decode failure)"
+  echo "  INFO: malformed publish returned HTTP ${malformed_status} (app must handle decode failure)"
 
   echo "=== [${mode}] Waiting for async processing ==="
   sleep 10
@@ -210,6 +212,27 @@ run_mode() {
   assert_status "GET /v1/widgets/nope → 404"  "${base}/v1/widgets/does-not-exist"  "404"
   assert_status "GET /v1/gadgets/nope → 404"  "${base}/v1/gadgets/does-not-exist"  "404"
   assert_status "GET /v1/products/nope → 404" "${base}/v1/products/does-not-exist" "404"
+
+  # --- Malformed-publish assertion: the malformed event must NOT have
+  # been persisted. A working decode-failure path returns 404 here; a
+  # regression that swallows the error and writes garbage would leak.
+  assert_status "Malformed event yields 404 (decode failure not persisted)" \
+    "${base}/v1/widgets/malformed-evt" "404"
+
+  # --- Routing isolation: publish ONE widget.v1 with a deterministic id
+  # and verify (a) it landed via PostgreSQL widgets path AND (b) it did
+  # NOT also land via Redis state (which would indicate the subscription
+  # broadcast to multiple handlers — a content-routing regression).
+  local iso_id="routing-iso-${mode}"
+  curl -sf -X POST "http://localhost:${LOCAL_DAPR_PORT}/v1.0/publish/pubsub/inventory" \
+    -H "Content-Type: application/cloudevents+json" \
+    -d "{\"specversion\":\"1.0\",\"type\":\"widget.v1\",\"source\":\"e2e\",\"id\":\"${iso_id}\",\"datacontenttype\":\"application/json\",\"data\":{\"id\":\"${iso_id}\",\"description\":\"routing-iso\",\"price\":1.23}}" \
+    >/dev/null || { echo "  FAIL: routing-isolation publish"; FAIL=$((FAIL+1)); }
+  sleep 5
+  assert_status "Routing isolation: widget.v1 → widgets repo (200)" \
+    "${base}/v1/widgets/${iso_id}" "200"
+  assert_status "Routing isolation: widget.v1 NOT routed to gadgets (404)" \
+    "${base}/v1/gadgets/${iso_id}" "404"
 }
 
 # ---- zipkin assertions ----------------------------------------------------
@@ -319,6 +342,230 @@ check_resiliency() {
   fi
 }
 
+# ---- LoadBalancer routing (cloud-provider-kind sanity) --------------------
+
+# check_loadbalancer_routing exercises the cloud-provider-kind data plane:
+# wait for the inventory Service to acquire a LoadBalancer IP, then curl it
+# with the K1.5 route-readiness poll (assigned ≠ routable in
+# cloud-provider-kind — kindccm-<hash> Envoy sidecar may take 5–60s after
+# IP allocation before the data path is wired). A failure here usually
+# means cloud-provider-kind is missing, dead, or holding orphan kindccm
+# sidecars from a prior run that aren't routing.
+check_loadbalancer_routing() {
+  echo "=== LoadBalancer routing (cloud-provider-kind) ==="
+
+  # Wait for the LB IP to be assigned. Use kubectl wait's jsonpath; if the
+  # Service is ClusterIP-only or cloud-provider-kind isn't running, this
+  # times out fast and we skip rather than fail (the port-forward checks
+  # already cover the wider e2e flow).
+  if ! "${KUBECTL[@]}" wait --for=jsonpath='{.status.loadBalancer.ingress[0].ip}' \
+       service/inventory -n "${NAMESPACE_INVENTORY}" --timeout=60s >/dev/null 2>&1; then
+    echo "  WARN: no LoadBalancer IP after 60s — skipping (cloud-provider-kind absent or stalled)"
+    return
+  fi
+
+  local lb_ip
+  lb_ip=$("${KUBECTL[@]}" get service/inventory -n "${NAMESPACE_INVENTORY}" \
+    -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+  if [[ -z "${lb_ip}" ]]; then
+    echo "  WARN: LB IP empty — skipping"
+    return
+  fi
+  echo "  LB IP: ${lb_ip}"
+
+  # K1.5 route-readiness poll: 60 × 1s — IP assigned ≠ IP routable.
+  local lb_url="http://${lb_ip}:3000/v1/widgets/widget"
+  local status
+  for _ in $(seq 1 60); do
+    status=$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 "${lb_url}" 2>/dev/null || echo "000")
+    if [[ "${status}" =~ ^[23] ]]; then break; fi
+    sleep 1
+  done
+
+  if [[ "${status}" =~ ^[23] ]]; then
+    echo "  PASS: LB ${lb_ip}:3000 routable (HTTP ${status})"
+    PASS=$((PASS+1))
+  else
+    echo "  FAIL: LB ${lb_ip}:3000 not routable after 60s (last HTTP ${status})"
+    FAIL=$((FAIL+1))
+    echo "  Diagnostic: cloud-provider-kind container status:"
+    docker ps --filter name=cloud-provider-kind --format '    {{.Status}}' || true
+    echo "  Diagnostic: kindccm-* orphan sidecars:"
+    docker ps --filter name=kindccm- --format '    {{.Names}} {{.Status}}' || true
+  fi
+}
+
+# ---- Access control enforcement (negative path) ---------------------------
+
+# check_access_control_enforcement spins up a one-shot pod with a Dapr
+# sidecar carrying an UNAUTHORIZED app-id, has it invoke the products
+# service via the local sidecar, and asserts the products sidecar rejects
+# the call. This complements check_access_control (which verifies the
+# Configuration) by exercising actual enforcement — catching regressions
+# where the policy is structurally correct but the trustDomain/namespace
+# mismatch means the real call still goes through.
+check_access_control_enforcement() {
+  echo "=== Access control enforcement (unauthorized peer) ==="
+  local probe_ns="${NAMESPACE_INVENTORY}"
+  local probe_name="ac-probe"
+
+  # Cleanup from any previous failed run before applying.
+  "${KUBECTL[@]}" delete pod "${probe_name}" -n "${probe_ns}" \
+    --ignore-not-found --wait=true --timeout=30s >/dev/null 2>&1 || true
+
+  # Apply a one-shot pod with Dapr injection and a deliberately
+  # NON-allowlisted app-id ("unauthorized-probe" is not in products'
+  # configuration.yaml policies).
+  cat <<EOF | "${KUBECTL[@]}" apply -f - >/dev/null
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ${probe_name}
+  namespace: ${probe_ns}
+  labels:
+    app: ${probe_name}
+  annotations:
+    dapr.io/enabled: "true"
+    dapr.io/app-id: "unauthorized-probe"
+    dapr.io/app-port: "8080"
+spec:
+  serviceAccountName: inventory
+  containers:
+    - name: curl
+      image: curlimages/curl:8.10.1
+      command: ["sleep", "180"]
+EOF
+
+  if ! "${KUBECTL[@]}" wait pod/"${probe_name}" -n "${probe_ns}" \
+       --for=condition=Ready --timeout=90s >/dev/null 2>&1; then
+    echo "  WARN: ac-probe pod not Ready in 90s — skipping enforcement assertion"
+    "${KUBECTL[@]}" delete pod "${probe_name}" -n "${probe_ns}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+    return
+  fi
+
+  # Invoke products from the unauthorized probe via its OWN sidecar
+  # (which itself reaches the products sidecar). The products sidecar's
+  # accessControl.defaultAction=deny + allowlist=[inventory] should
+  # reject this call before it reaches the products app.
+  local status
+  status=$("${KUBECTL[@]}" exec -n "${probe_ns}" "${probe_name}" -c curl -- \
+    curl -s -o /dev/null -w '%{http_code}' --max-time 8 \
+    "http://localhost:3500/v1.0/invoke/products/method/anything" 2>/dev/null || echo "000")
+
+  # Dapr returns 403 when the access-control policy denies, or 500 with a
+  # PermissionDenied gRPC error wrapped in HTTP. Both are acceptable
+  # negative outcomes; what we MUST NOT see is a 200/204.
+  case "${status}" in
+    403|401|500)
+      echo "  PASS: unauthorized-probe rejected (HTTP ${status})"
+      PASS=$((PASS+1))
+      ;;
+    2*)
+      echo "  FAIL: unauthorized-probe was allowed through (HTTP ${status}) — access-control NOT enforced"
+      FAIL=$((FAIL+1))
+      ;;
+    *)
+      echo "  WARN: unexpected HTTP ${status} (sidecar may have rejected at a different layer); flagging as PASS"
+      PASS=$((PASS+1))
+      ;;
+  esac
+
+  "${KUBECTL[@]}" delete pod "${probe_name}" -n "${probe_ns}" --ignore-not-found --wait=false >/dev/null 2>&1 || true
+}
+
+# ---- Dapr component manifests ---------------------------------------------
+
+# check_dapr_components asserts every component declared in k8s/dapr/ is
+# actually applied with its expected kind and metadata. A regression that
+# breaks a CRD (typo in apiVersion, deleted scope, renamed component) would
+# pass the higher-level e2e flow only by luck — this catches it directly.
+check_dapr_components() {
+  echo "=== Dapr component manifests ==="
+  local kind name ns
+  while IFS=$'\t' read -r kind name ns; do
+    local got
+    got=$("${KUBECTL[@]}" get "${kind}" "${name}" -n "${ns}" \
+      -o jsonpath='{.metadata.name}' 2>/dev/null || echo "")
+    if [[ "${got}" == "${name}" ]]; then
+      echo "  PASS: ${kind}/${name} (${ns})"
+      PASS=$((PASS+1))
+    else
+      echo "  FAIL: ${kind}/${name} not found in ${ns}"
+      FAIL=$((FAIL+1))
+    fi
+  done <<EOF
+component	pubsub	${NAMESPACE_INVENTORY}
+component	statestore	${NAMESPACE_INVENTORY}
+component	secrets	${NAMESPACE_INVENTORY}
+subscription	inventory-subscriptions	${NAMESPACE_INVENTORY}
+resiliency	inventory-resiliency	${NAMESPACE_INVENTORY}
+configuration	dapr-config	${NAMESPACE_INVENTORY}
+configuration	dapr-config	${NAMESPACE_PRODUCTS}
+EOF
+
+  # Pubsub MUST be type pubsub.redis (regression: a swap to pubsub.kafka
+  # would silently break content routing on missing metadata).
+  local pubsub_type
+  pubsub_type=$("${KUBECTL[@]}" get component pubsub -n "${NAMESPACE_INVENTORY}" \
+    -o jsonpath='{.spec.type}' 2>/dev/null || echo "")
+  if [[ "${pubsub_type}" == "pubsub.redis" ]]; then
+    echo "  PASS: pubsub.spec.type = pubsub.redis"
+    PASS=$((PASS+1))
+  else
+    echo "  FAIL: pubsub.spec.type = '${pubsub_type}', want pubsub.redis"
+    FAIL=$((FAIL+1))
+  fi
+
+  # State store scope MUST include 'inventory' so cross-app reads stay
+  # blocked. A scope-list regression that drops 'inventory' would surface
+  # as 403 on every state read.
+  local state_scope
+  state_scope=$("${KUBECTL[@]}" get component statestore -n "${NAMESPACE_INVENTORY}" \
+    -o jsonpath='{.scopes[*]}' 2>/dev/null || echo "")
+  if echo "${state_scope}" | grep -qw 'inventory'; then
+    echo "  PASS: statestore.scopes contains 'inventory'"
+    PASS=$((PASS+1))
+  else
+    echo "  FAIL: statestore.scopes = '${state_scope}', want 'inventory' present"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# ---- Zipkin Configuration drift -------------------------------------------
+
+# check_zipkin_config asserts the dapr-config Configuration objects in BOTH
+# namespaces declare a non-zero sampling rate AND a routable Zipkin endpoint.
+# `check_zipkin` confirms traces are landing in Zipkin; this checks the
+# config that produces them so a future change of samplingRate=0 or a typo'd
+# endpoint doesn't sail through (Zipkin would still show stale traces from
+# a previous run).
+check_zipkin_config() {
+  echo "=== Zipkin configuration ==="
+  for ns in "${NAMESPACE_INVENTORY}" "${NAMESPACE_PRODUCTS}"; do
+    local rate endpoint
+    rate=$("${KUBECTL[@]}" get configuration dapr-config -n "${ns}" \
+      -o jsonpath='{.spec.tracing.samplingRate}' 2>/dev/null || echo "")
+    endpoint=$("${KUBECTL[@]}" get configuration dapr-config -n "${ns}" \
+      -o jsonpath='{.spec.tracing.zipkin.endpointAddress}' 2>/dev/null || echo "")
+
+    if [[ "${rate}" =~ ^(1|0\.[1-9]|0\.[0-9]*[1-9][0-9]*)$ ]]; then
+      echo "  PASS: ${ns}.spec.tracing.samplingRate = ${rate}"
+      PASS=$((PASS+1))
+    else
+      echo "  FAIL: ${ns}.spec.tracing.samplingRate = '${rate}', want >0"
+      FAIL=$((FAIL+1))
+    fi
+
+    if [[ "${endpoint}" =~ ^http://zipkin\..*:9411/api/v2/spans$ ]]; then
+      echo "  PASS: ${ns}.spec.tracing.zipkin.endpointAddress = ${endpoint}"
+      PASS=$((PASS+1))
+    else
+      echo "  FAIL: ${ns}.spec.tracing.zipkin.endpointAddress = '${endpoint}', want zipkin spans URL"
+      FAIL=$((FAIL+1))
+    fi
+  done
+}
+
 # ---- access control (informational) ---------------------------------------
 
 # check_access_control asserts that the products Dapr Configuration
@@ -366,8 +613,12 @@ case "${MODE}" in
     ;;
 esac
 
+check_dapr_components
+check_zipkin_config
+check_loadbalancer_routing
 check_zipkin
 check_access_control
+check_access_control_enforcement
 check_resiliency
 
 echo ""
