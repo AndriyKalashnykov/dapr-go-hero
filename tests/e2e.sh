@@ -129,11 +129,26 @@ run_mode() {
   local mode="$1"
 
   # Fresh port-forwards per mode — the previous inventory pod is gone.
+  # SIGTERM the prior kubectl port-forward processes AND `wait` for them
+  # to exit. Without the wait, the kernel may still hold the local TCP
+  # socket in TIME_WAIT when the next mode's port-forward tries to bind
+  # the same LOCAL_*_PORT — observed on the 4th of 4 modes in v0.1.0
+  # tag run (sdk-grpc port-forward setup hung 30s, e2e failed).
   local pid
   for pid in "${PF_PIDS[@]:-}"; do
-    [[ -n "${pid}" ]] && kill "${pid}" 2>/dev/null || true
+    if [[ -n "${pid}" ]]; then
+      kill "${pid}" 2>/dev/null || true
+      wait "${pid}" 2>/dev/null || true
+    fi
   done
   PF_PIDS=()
+
+  # Defense in depth: also re-allocate the LOCAL_*_PORT variables per
+  # mode. If anything else on the host briefly grabs an old port between
+  # modes, we'll silently land on a fresh free port instead of failing.
+  LOCAL_DAPR_PORT=$(pick_port)
+  LOCAL_REST_PORT=$(pick_port)
+  LOCAL_ZIPKIN_PORT=$(pick_port)
 
   if [[ "${mode}" != "sdk-http" ]] || [[ "${FORCE_PATCH:-0}" == "1" ]]; then
     patch_inventory_mode "${mode}"
