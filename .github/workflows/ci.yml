@@ -61,7 +61,7 @@ jobs:
 
   static-check:
     needs: [changes]
-    if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'true' }}
+    if: ${{ !failure() && !cancelled() && (needs.changes.outputs.code == 'true' || startsWith(github.ref, 'refs/tags/')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -78,7 +78,7 @@ jobs:
 
   build:
     needs: [changes, static-check]
-    if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'true' }}
+    if: ${{ !failure() && !cancelled() && (needs.changes.outputs.code == 'true' || startsWith(github.ref, 'refs/tags/')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -95,7 +95,7 @@ jobs:
 
   test:
     needs: [changes, static-check]
-    if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'true' }}
+    if: ${{ !failure() && !cancelled() && (needs.changes.outputs.code == 'true' || startsWith(github.ref, 'refs/tags/')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -112,7 +112,7 @@ jobs:
 
   integration-test:
     needs: [changes, static-check]
-    if: ${{ !failure() && !cancelled() && needs.changes.outputs.code == 'true' }}
+    if: ${{ !failure() && !cancelled() && (needs.changes.outputs.code == 'true' || startsWith(github.ref, 'refs/tags/')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -256,7 +256,7 @@ jobs:
 
   e2e:
     needs: [changes, build, test]
-    if: ${{ !failure() && !cancelled() && (needs.changes.outputs.e2e == 'true' || contains(github.event.pull_request.labels.*.name, 'run-e2e')) }}
+    if: ${{ !failure() && !cancelled() && (needs.changes.outputs.e2e == 'true' || contains(github.event.pull_request.labels.*.name, 'run-e2e') || startsWith(github.ref, 'refs/tags/')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
