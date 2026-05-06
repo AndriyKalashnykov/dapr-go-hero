@@ -170,9 +170,11 @@ Dapr pub/sub callbacks (e.g., `/widgets.v1`) are delivery mechanics, not a publi
 
 Gadget and Products repositories are covered by mock-based unit tests plus real E2E — adding a third integration layer for those would duplicate what E2E already validates.
 
-## Event Flow
+## Architecture
 
-Each CloudEvent arrives on the `inventory` topic. Dapr's content-based routing selects one of three handlers based on `event.type`:
+Each CloudEvent arrives on the `inventory` topic. Dapr's content-based routing selects one of three handlers based on `event.type`.
+
+### Container view
 
 <p align="center"><img src="docs/diagrams/out/c4-container.png" alt="C4 Container view: dapr-go-hero topology across three K8s namespaces with Dapr sidecars, routing, and Zipkin tracing" width="800"></p>
 
@@ -195,13 +197,53 @@ Dapr envelopes events in [CloudEvents](https://cloudevents.io/) and propagates W
 
 Service Invocation to the Products service uses a generated gRPC client pointed at the local Dapr sidecar, with `dapr-app-id` metadata attached. In K8s with per-service namespaces, the app ID is fully-qualified (`products.dapr-go-hero-products`) because Dapr's default name resolver is namespace-scoped — see [docs/containerize-and-deploy.md](docs/containerize-and-deploy.md) for the resolution semantics.
 
-## Architecture & Deployment
+### Publish-to-delivery sequence
+
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'background':'#FFFFFF','fontFamily':'ui-sans-serif, system-ui, sans-serif','primaryColor':'#FFFFFF','primaryTextColor':'#000000','primaryBorderColor':'#0070E5','actorBkg':'#FFFFFF','actorBorder':'#0070E5','actorTextColor':'#000000','actorLineColor':'#0070E5','signalColor':'#0070E5','signalTextColor':'#0070E5','labelBoxBkgColor':'#0070E5','labelBoxBorderColor':'#0070E5','labelTextColor':'#FFFFFF','loopTextColor':'#0070E5','noteBkgColor':'#FFFFFF','noteBorderColor':'#0070E5','noteTextColor':'#000000','altBackground':'#FFFFFF','activationBkgColor':'#0070E5','activationBorderColor':'#0070E5','sequenceNumberColor':'#FFFFFF'}}}%%
+sequenceDiagram
+  autonumber
+  actor Pub as Publisher<br/>(curl / make send-*)
+  participant IDaprd as inventory daprd
+  participant Redis as Redis pub/sub
+  participant IApp as inventory app
+  participant PG as PostgreSQL
+  participant RState as Redis state
+  participant PDaprd as products daprd
+  participant PApp as products app
+
+  Pub->>+IDaprd: POST /v1.0/publish/pubsub/inventory<br/>CloudEvent (type=widget.v1)
+  IDaprd->>Redis: XADD inventory
+  Redis-->>IDaprd: deliver to subscribers
+  IDaprd->>+IApp: route by event.type
+
+  alt widget.v1 → /widgets.v1
+    IApp->>+PG: INSERT widget (via Secret Store creds)
+    PG-->>-IApp: ok
+  else gadget.v1 → /gadgets.v1
+    IApp->>+RState: SET gadget:id
+    RState-->>-IApp: ok
+  else default → /products.v1 (thingamajig)
+    IApp->>IDaprd: gRPC SaveProduct<br/>header dapr-app-id: products.dapr-go-hero-products
+    IDaprd->>+PDaprd: invoke (cross-namespace name resolution)
+    PDaprd->>+PApp: SaveProduct RPC
+    PApp-->>-PDaprd: empty response
+    PDaprd-->>-IDaprd: ok
+  end
+
+  IApp-->>-IDaprd: 204 No Content
+  IDaprd-->>-Pub: 204 No Content
+
+  Note over IDaprd,PDaprd: All hops traced → Zipkin
+```
+
+### Deployment view
 
 <p align="center"><img src="docs/diagrams/out/c4-deployment.png" alt="C4 Deployment view: Docker host running a KinD cluster with three namespaces, injected Dapr sidecars, and the host-side cloud-provider-kind LoadBalancer controller" width="800"></p>
 
 Source: [`docs/diagrams/c4-deployment.puml`](docs/diagrams/c4-deployment.puml) · regenerate with `make diagrams`. Decision: see [ADR-0002](docs/adr/0002-cloud-provider-kind-over-metallb.md) for the MetalLB → cloud-provider-kind rationale.
 
-### Cluster Topology (flowchart)
+### Cluster Topology
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'background':'#FFFFFF','fontFamily':'ui-sans-serif, system-ui, sans-serif','primaryColor':'#FFFFFF','primaryTextColor':'#000000','primaryBorderColor':'#000000','secondaryColor':'#FFFFFF','tertiaryColor':'#FFFFFF','lineColor':'#0070E5','edgeLabelBackground':'#FFFFFF','clusterBkg':'#FFFFFF','clusterBorder':'#0070E5','titleColor':'#0070E5'}}}%%
@@ -268,46 +310,6 @@ graph TB
   class C,ML,R,P,Z,ISEC,ISA,ICRD,PSA,PCRD,ISVC,PSVC plain
   class DS,DD dapr
   class IPOD,PPOD emphasis
-```
-
-### Publish-to-delivery sequence
-
-```mermaid
-%%{init: {'theme':'base','themeVariables':{'background':'#FFFFFF','fontFamily':'ui-sans-serif, system-ui, sans-serif','primaryColor':'#FFFFFF','primaryTextColor':'#000000','primaryBorderColor':'#0070E5','actorBkg':'#FFFFFF','actorBorder':'#0070E5','actorTextColor':'#000000','actorLineColor':'#0070E5','signalColor':'#0070E5','signalTextColor':'#0070E5','labelBoxBkgColor':'#0070E5','labelBoxBorderColor':'#0070E5','labelTextColor':'#FFFFFF','loopTextColor':'#0070E5','noteBkgColor':'#FFFFFF','noteBorderColor':'#0070E5','noteTextColor':'#000000','altBackground':'#FFFFFF','activationBkgColor':'#0070E5','activationBorderColor':'#0070E5','sequenceNumberColor':'#FFFFFF'}}}%%
-sequenceDiagram
-  autonumber
-  actor Pub as Publisher<br/>(curl / make send-*)
-  participant IDaprd as inventory daprd
-  participant Redis as Redis pub/sub
-  participant IApp as inventory app
-  participant PG as PostgreSQL
-  participant RState as Redis state
-  participant PDaprd as products daprd
-  participant PApp as products app
-
-  Pub->>+IDaprd: POST /v1.0/publish/pubsub/inventory<br/>CloudEvent (type=widget.v1)
-  IDaprd->>Redis: XADD inventory
-  Redis-->>IDaprd: deliver to subscribers
-  IDaprd->>+IApp: route by event.type
-
-  alt widget.v1 → /widgets.v1
-    IApp->>+PG: INSERT widget (via Secret Store creds)
-    PG-->>-IApp: ok
-  else gadget.v1 → /gadgets.v1
-    IApp->>+RState: SET gadget:id
-    RState-->>-IApp: ok
-  else default → /products.v1 (thingamajig)
-    IApp->>IDaprd: gRPC SaveProduct<br/>header dapr-app-id: products.dapr-go-hero-products
-    IDaprd->>+PDaprd: invoke (cross-namespace name resolution)
-    PDaprd->>+PApp: SaveProduct RPC
-    PApp-->>-PDaprd: empty response
-    PDaprd-->>-IDaprd: ok
-  end
-
-  IApp-->>-IDaprd: 204 No Content
-  IDaprd-->>-Pub: 204 No Content
-
-  Note over IDaprd,PDaprd: All hops traced → Zipkin
 ```
 
 ### Namespace Isolation
