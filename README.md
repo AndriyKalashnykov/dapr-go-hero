@@ -3,9 +3,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-brightgreen.svg)](https://opensource.org/licenses/MIT)
 [![Renovate enabled](https://img.shields.io/badge/renovate-enabled-brightgreen.svg)](https://app.renovatebot.com/dashboard#github/AndriyKalashnykov/dapr-go-hero)
 
-# dapr-go-hero
+# Dapr Building Blocks in Go — Reference Microservice Platform
 
-Reference implementation of a Go microservice platform on [Dapr](https://dapr.io), comparing three client approaches (custom HTTP, custom gRPC, Dapr Go SDK) across four Dapr building blocks: Pub/Sub with content-based routing, State Store, Secret Store, and Service Invocation. Production-ready K8s deployment with KinD + cloud-provider-kind for local parity, Testcontainers-backed integration tests, and a CI pipeline that provisions a full Dapr cluster on every PR.
+Reference implementation of a Go microservice platform on [Dapr](https://dapr.io), comparing four client modes (custom HTTP, custom gRPC, Dapr Go SDK over HTTP, Dapr Go SDK over gRPC) across four Dapr building blocks: Pub/Sub with content-based routing, State Store, Secret Store, and Service Invocation. Ships with Kubernetes manifests, KinD + cloud-provider-kind for local parity with cloud LoadBalancer behaviour, Testcontainers-backed integration tests, and a CI pipeline that provisions a full Dapr cluster on every PR.
 
 <p align="center"><img src="docs/diagrams/out/c4-context.png" alt="C4 System Context: dapr-go-hero fans CloudEvents to Redis, PostgreSQL, Zipkin, and the Kubernetes Secret API" width="720"></p>
 
@@ -25,9 +25,9 @@ Reference implementation of a Go microservice platform on [Dapr](https://dapr.io
 | Secrets | `secretstores.kubernetes` (K8s-native) | RBAC-scoped; no external Vault dependency |
 | Resiliency | Dapr `Resiliency` CRD | Declarative retries, timeouts, circuit breakers per target app/component |
 | Test layers | Unit (Go testing), Integration (Testcontainers), E2E (KinD + curl) | Each layer catches a different class of defect |
-| Tool versioning | [mise](https://mise.jdx.dev) | Single source of truth for every CLI: Go, kind, golangci-lint, gosec, hadolint, trivy, gitleaks, actionlint, shellcheck, act, protoc, protoc-gen-* — pinned in `.mise.toml`, installed by `make deps` |
+| Tool versioning | [mise](https://mise.jdx.dev) | Single source of truth for every CLI; pinned in `.mise.toml`, installed by `make deps` |
 | Code quality | golangci-lint, gosec, hadolint, mermaid-cli | Enforced via composite `make static-check` gate |
-| Dependency updates | [Renovate](https://docs.renovatebot.com/) | Built-in `gomod` / `github-actions` / `dockerfile` / `kubernetes` / `mise` managers + custom-regex coverage of Makefile constants, workflow `with:` pins, and `tests/*.sh` image pins |
+| Dependency updates | [Renovate](https://docs.renovatebot.com/) | Built-in `gomod`/`github-actions`/`dockerfile`/`kubernetes`/`mise` managers plus custom-regex coverage of Makefile constants and shell-script image pins |
 
 ## Building Blocks Demonstrated
 
@@ -40,7 +40,7 @@ Reference implementation of a Go microservice platform on [Dapr](https://dapr.io
 
 ## Quick Start
 
-Two delivery modes. Kubernetes (Option A) is closest to production; local dev (Option B) iterates faster on single-binary changes.
+Two delivery modes: Kubernetes (Option A) mirrors the production deployment path; local dev (Option B) gives a faster inner loop on single-binary changes.
 
 ### Option A — Kubernetes (KinD + cloud-provider-kind + Dapr)
 
@@ -72,19 +72,36 @@ curl http://localhost:3000/v1/products/thingamajig | jq
 
 ### Option B — Local dev (standalone binaries)
 
-Single-binary processes with a Dapr sidecar each. Useful for tight feedback loops on code changes.
+Single-binary processes with a Dapr sidecar each. Faster inner loop for code changes.
+
+One-time setup — PostgreSQL container + schema:
 
 ```bash
-make deps           # install mise + pinned tool versions
-make build          # compile both binaries
-make test           # unit tests
-make run-products   # terminal 1: products gRPC service
-make run            # terminal 2: inventory service (default: SDK HTTP mode)
-make send-all       # terminal 3: publish 3 CloudEvents
-make get-all        # query REST endpoints
+docker run --name postgres -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres:16
+cat tables.sql | docker exec -i postgres psql -U postgres -d postgres
 ```
 
-Local dev requires a running PostgreSQL container and `secrets.json`. See [Local dev setup](#local-dev-setup).
+Run the stack (three terminals):
+
+```bash
+make deps           # install mise + pinned tool versions (first run only)
+make build          # compile both binaries
+
+# Terminal 1
+make run-products
+
+# Terminal 2 — pick a client mode
+make run-sdk-http      # Dapr Go SDK over HTTP (default via `make run`)
+make run-sdk-grpc      # Dapr Go SDK over gRPC
+make run-custom-http   # custom HTTP client
+make run-custom-grpc   # custom gRPC client
+
+# Terminal 3 — publish CloudEvents, then query REST API
+make send-all
+make get-all
+```
+
+Each `run-*` target maps to a different code path in `cmd/inventory/main.go` and exercises the same `state.Store` / `secrets.Store` interfaces through a different transport.
 
 ## Prerequisites
 
@@ -111,7 +128,7 @@ Local dev requires a running PostgreSQL container and `secrets.json`. See [Local
 | Tool | Version | Purpose |
 |------|---------|---------|
 | [Dapr CLI](https://docs.dapr.io/getting-started/install-dapr-cli/) | 1.17+ | `dapr init` provides self-hosted Redis + Zipkin |
-| PostgreSQL | 16+ | Run as Docker container, see [Local dev setup](#local-dev-setup) |
+| PostgreSQL | 16+ | Run as Docker container, see [Quick Start → Option B](#option-b--local-dev-standalone-binaries) |
 
 **Tooling auto-installed via mise** (`make deps` reads `.mise.toml`):
 
@@ -143,7 +160,7 @@ Dapr pub/sub callbacks (e.g., `/widgets.v1`) are delivery mechanics, not a publi
 
 ### Configuration surface
 
-`pkg/config/config.go` centralizes every host/port/app-id behind env vars with sensible defaults. A small built-in `loadDotenv` helper reads `.env` on startup without overwriting existing process env vars (zero dependencies — the helper is ~20 lines in `pkg/config/config.go`). K8s deployments set the same keys via `env:` in the pod spec — one source of truth, two consumers.
+`pkg/config/config.go` centralizes every host/port/app-id behind env vars with sensible defaults. A built-in `loadDotenv` helper reads `.env` at startup without overwriting existing process env vars (zero dependencies). K8s deployments set the same keys via `env:` in the pod spec — one source of truth, two consumers.
 
 ### Test pyramid
 
@@ -253,7 +270,7 @@ graph TB
   class IPOD,PPOD emphasis
 ```
 
-### Event Flow (CloudEvent → 3 routes)
+### Publish-to-delivery sequence
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'background':'#FFFFFF','fontFamily':'ui-sans-serif, system-ui, sans-serif','primaryColor':'#FFFFFF','primaryTextColor':'#000000','primaryBorderColor':'#0070E5','actorBkg':'#FFFFFF','actorBorder':'#0070E5','actorTextColor':'#000000','actorLineColor':'#0070E5','signalColor':'#0070E5','signalTextColor':'#0070E5','labelBoxBkgColor':'#0070E5','labelBoxBorderColor':'#0070E5','labelTextColor':'#FFFFFF','loopTextColor':'#0070E5','noteBkgColor':'#FFFFFF','noteBorderColor':'#0070E5','noteTextColor':'#000000','altBackground':'#FFFFFF','activationBkgColor':'#0070E5','activationBorderColor':'#0070E5','sequenceNumberColor':'#FFFFFF'}}}%%
@@ -325,34 +342,6 @@ Multi-stage Alpine with BuildKit cache mounts. Post-initial build, `make docker-
 - **cloud-provider-kind** — kind-team-maintained host-side controller that watches `Service` objects of type `LoadBalancer` and allocates IPs on the `kind` Docker network. Replaces MetalLB: no in-cluster DaemonSet, no IPAddressPool/L2Advertisement CRDs, works across all supported `kindest/node` versions without release-track drift.
 - **Dapr runtime** via `dapr init -k --runtime-version $(DAPR_RUNTIME_VERSION)` — Operator, Sentry, Placement, Scheduler, Sidecar Injector, pinned to the same version CI uses
 - **Dapr Dashboard** — cluster inspection UI
-
-## Local dev setup
-
-See [Quick Start → Option A](#option-a--kubernetes-kind--cloud-provider-kind--dapr) for the Kubernetes flow. For standalone binaries:
-
-```bash
-docker run --name postgres -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres:16
-cat tables.sql | docker exec -i postgres psql -U postgres -d postgres
-```
-
-Start services (three terminals):
-
-```bash
-# Terminal 1
-make run-products
-
-# Terminal 2 — pick a client mode
-make run-custom-http   # custom HTTP client
-make run-custom-grpc   # custom gRPC client
-make run-sdk-http      # Dapr Go SDK over HTTP (default via `make run`)
-make run-sdk-grpc      # Dapr Go SDK over gRPC
-
-# Terminal 3 — publish events, then query
-make send-all
-make get-all
-```
-
-Each `run-*` target maps to a different code path in `cmd/inventory/main.go` and exercises the same interfaces (`state.Store`, `secrets.Store`) through a different transport.
 
 ## Available Make Targets
 
