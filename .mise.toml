@@ -3,7 +3,7 @@
 # annotations needed — mise extracts every entry via its built-in
 # datasources: golang-version for go, node-version for node, github-tags
 # for aqua: backends, the Go module proxy for go: backends, etc.).
-go = "1.26.2"
+go = "1.26.4"
 node = "24"
 protoc = "34.1"
 protoc-gen-go = "1.36.11"
